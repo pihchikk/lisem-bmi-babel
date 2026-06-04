@@ -1,0 +1,42 @@
+The openLISEM model 
+======================
+openLISEM is a spatial flood, runoff and erosion model openLISEM. Thank you
+for downloading. openLISEM simulates the spatial dynamics of surface runoff and 
+erosion for small plots of several m2 to catchments of >1000 km2. 
+
+openLISEM uses the freeware GIS PCRaster (http://pcraster.geo.uu.nl) for database creation and 
+analysis of the results. 
+
+openLISEM is developed in Mingw64 for QT, using Qwt, GDAL, OMP, PCRaster and the code from the FUllSWOF project: https://arxiv.org/abs/1401.4125
+
+INSTALL: Download and install the installation package from GitHub: https://github.com/vjetten/openlisem/releases/tag/lisem_bin
+This package install also the LISEM dbase generator, and NutShell, an interface for PCRaster
+
+The PCRaster must be installed using (mini)conda (not strictly necessary for openLISEM itself, but for all dbase management):
+download and install miniforge, a port of miniconda: https://conda-forge.org/download/
+open a conda cmd window and do the following:
+
+	conda create --name lisem python
+	conda activate lisem
+	conda install -c conda-forge pcraster owslib scipy gdal numpy
+
+(answer ‘y’ to all questions, this will take some time)
+
+
+2) Terms of use 
+===============
+This software is free and open source (GNU v3), hosted by github: 
+ https://github.com/vjetten/openlisem 
+
+copyright details are given in the file "COPYRIGHT" in this repository
+
+good luck
+Victor Jetten
+v.g.jetten AD utwente.nl
+
+
+
+
+
+
+

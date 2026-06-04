@@ -1,0 +1,39 @@
+"LISEM run with:",/home/jovyan/work/LISEM/runfiles/probnik_20m.run               
+"LISEM results at time (day:min):",     0.000000000               :             718               
+"Catchment area (km2):",     2.728896271               
+"Total Precipitation (mm):",    67.956666667               
+"Total interception(mm):",     0.000000000               
+"Total Litter interception (mm):",     0.000000000               
+"Total House interception (mm):",     0.000000000               
+"Surface storage (mm):",     0.232592811               
+"Total infiltration (mm):",     0.000000000               
+"Total ETa (mm):",     0.000000000               
+"Storm Drain (mm):",     0.000000000               
+"Water in overland flow (h<50) (mm):",1.34958
+"Water in flood (h>50) (mm):",12.8842
+"Water in channels (mm):",     0.000000000               
+"Water across boundary (mm):",    97.758289099               
+"Water in rentention (m3):",     0.000000000               
+"Total baseflow and GW inflow (mm):",     0.000000000               
+"Total peakflow (mm):",     0.270343176               
+"Total outflow (overland+channel) (mm):",     0.270343176               
+"Total outflow (overland+channel) (m3):",   737.604321967               
+"Total boundary outflow (m3):",266723.715978063               
+"Total storm/tile drain discharge (m3):",     0.000000000               
+"Peak time precipitation (min):",     0.000000000               
+"Total discharge/Precipitation (%):",     0.397176393               
+"Flood volume (max level) (m3):", 85083.599312359               
+"Flood area (max level) (m2):",409600.000000000               
+               
+"Splash detachment (land) (ton):",   146.894340175               
+"Flow detachment (land) (ton):",  2069.462175747               
+"Deposition (land) (ton):", -1862.897573824               
+"Sediment (land) (ton):",    41.052784352               
+"Flow detachment (channels) (ton):",     0.000000000               
+"Deposition (channels) (ton):",     0.000000000               
+"Sediment (channels) (ton):",     0.000000000               
+"Total soil loss (ton):",   312.103361719               
+"Average soil loss (kg/ha):",  1143.698150394               
+               
+"Peak discharge for outlet 1 (l/s):",   164.049335608               
+"Peak time discharge for outlet 1 (min):",    10.000000000               

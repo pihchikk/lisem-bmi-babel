@@ -1,0 +1,16 @@
+AUTHORS
+README.txt
+README_BMI.md
+pyproject.toml
+bmi_openlisem/__init__.py
+bmi_openlisem/bmi_openlisem.py
+bmi_openlisem/cli.py
+bmi_openlisem/config_manager.py
+bmi_openlisem/map_io.py
+bmi_openlisem.egg-info/PKG-INFO
+bmi_openlisem.egg-info/SOURCES.txt
+bmi_openlisem.egg-info/dependency_links.txt
+bmi_openlisem.egg-info/entry_points.txt
+bmi_openlisem.egg-info/requires.txt
+bmi_openlisem.egg-info/top_level.txt
+tests/test_bmi_openlisem.py
