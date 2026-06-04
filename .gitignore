@@ -1,3 +1,28 @@
-*.ipynb
-*.ipynb
-*.ipynb
+# build artifacts
+build/
+*-bin/
+lisem-bin/
+*.egg-info/
+__pycache__/
+*.pyc
+*.so
+*.o
+*.obj
+CMakeFiles/
+CMakeCache.txt
+# data / runs / outputs (не коммитим)
+inputfiles/
+results/
+runfiles/
+*.run
+*.run.bak
+*.map
+*.res
+*.csv
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+# docs build
+doxygen/
+docs/_build/

@@ -1,7 +1,0 @@
-<h2>Interception options</h2>
-<ul>
-<li>Activate litter effect on interception and also splash erosion: using the map litter.map (0-1), assuming that the litter covers the entire cell (not only under vegetation, and has a storage increasing with cover from 0 to 2 mm</li>
-</ul>
-<p><strong>Canopy storage equations: </strong>links LAI (in m2/m2) to storage capacity of the canopy (Smax in mm) for a set of researched vegetation types. This is the storage capacity of the plants, not of the pixel. So a tree in a pixel can have 2 mm of storage, but the average in the pixel depends on the cover raction.</p>
-<p><strong>user defined:</strong> in case of varying land use/vegetation types, or a vegetation type not in the equations, the user can provide a canopy storage map, smax.map (mm)<br /></p>
-<p>NOTE: the canopy storage is for the plants in a grdicell. The storage is recalculated internally with the vegetation cover, to have the net storage per gridcell. In other owrds: Smax represnts the <i>plant</i> canopy storage, not the <i>gridcell</i> canopy storage.</p>

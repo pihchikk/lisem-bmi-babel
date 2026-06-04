@@ -1,2 +1,0 @@
-[console_scripts]
-bmi-openlisem = bmi_openlisem.cli:main
