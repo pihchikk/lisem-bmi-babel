@@ -1280,6 +1280,17 @@ public slots:   //note, was private loop but dixygen does not recognize that
     // void onResume();
     // void onStop();
 
+    // BMI surface (standard lifecycle)
+    void Initialize();   // = InitializeStatic() + ResetEvent()
+    bool Update();       // advance one _dt; returns (time < EndTime)
+    void Finalize();     // free maps/swatre; no quit
+
+private:
+    // internal engine — NOT on BMI surface
+    void InitializeStatic();  // heavy setup: terrain, params, map allocation
+    void ResetEvent();        // light per-event reset: zero state, set initial theta
+    bool bmiHasError = false;
+
 // private:
 //     std::atomic_bool paused {false};
 //     std::atomic_bool stopped {false};

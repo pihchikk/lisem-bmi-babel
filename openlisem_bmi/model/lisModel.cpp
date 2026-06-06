@@ -79,32 +79,29 @@ void TWorld::saveMBerror2file( bool start) //bool doError,
 
 }
 //---------------------------------------------------------------------------
-// the actual model with the main loop
-void TWorld::DoModel()
+// ---- InitializeStatic: heavy one-time setup (terrain, params, map allocation) ----
+void TWorld::InitializeStatic()
 {
-    QTextStream consoleout(stdout); // for info with -ni batch mode
-    if (noInterface) {
-        consoleout << "\nrunning OpenLISEM with:" << op.runfilename << "\n\n";
-        consoleout.flush();
-    }
+    try {
+        QTextStream consoleout(stdout);
+        if (noInterface || bmiMode) {
+            consoleout << "\nrunning OpenLISEM with:" << op.runfilename << "\n\n";
+            consoleout.flush();
+        }
 
-    if (!op.doBatchmode)
-        temprunname = QString(op.userAppDir+"openlisemtmp.run");
-    else
-        temprunname = op.runfilename;
+        if (!op.doBatchmode)
+            temprunname = QString(op.userAppDir+"openlisemtmp.run");
+        else
+            temprunname = op.runfilename;
 
-    mapFormat = "PCRaster";
+        mapFormat = "PCRaster";
 
-    errorFileName = QString(resultDir + "error-"+ op.timeStartRun +".csv");
-    //errorSedFileName = QString(resultDir + "errorsed-"+ op.timeStartRun +".txt");
-    time_ms.start();
-    // get time to calc run length
-    startTime=omp_get_wtime()/60.0;
+        errorFileName = QString(resultDir + "error-"+ op.timeStartRun +".csv");
+        time_ms.start();
+        startTime = omp_get_wtime()/60.0;
 
-    ETafactorTot = 0;
+        ETafactorTot = 0;
 
-    try
-    {
         DestroyData();
 
         DEBUG("reading and initializing data");
@@ -165,12 +162,7 @@ void TWorld::DoModel()
         QString S = resultDir + QFileInfo(op.runfilename).fileName();
         QFile::copy(op.runfilename, S);
 
-        // QSaveFile file(resultDir + op.explanation + ".txt");
-        // if (!file.open(QIODevice::WriteOnly))
-        //     return false;
-        // return file.commit();
-
-        //time vraiables in sec
+        //time variables in sec
         double btd, etd, btm, etm;
         QString beginTimeString = getvaluestring("Begin Time");
         QString endTimeString = getvaluestring("End Time");
@@ -214,11 +206,11 @@ void TWorld::DoModel()
         DEBUG("Intialize Database");
         IntializeData();
 
-        // MC - no_ui probalbly this can be skipped for noInterface??
+        // MC - no_ui probably this can be skipped for noInterface??
         setupDisplayMaps();
         // reset all display output maps for new job
         // must be done after Initialize Data because then we know how large the map is
-        // clear() calls the destruction of all elements in the sturcture
+        // clear() calls the destruction of all elements in the structure
 
         if (SwitchRainfall)
         {
@@ -248,9 +240,6 @@ void TWorld::DoModel()
         }
 
         SwitchSnowmelt = false;
-        // if (SwitchSnowmelt)
-
-        // }
 
         if (SwitchDischargeUser)
         {
@@ -270,22 +259,13 @@ void TWorld::DoModel()
             GetWHboundaryData(WaveinFileName);
         }
 
-        // get all input data and create and initialize all maps and variables
-
-        CountLandunits();
-        //for output totals per landunit
-
-        runstep = 0; //  runstep is used to initialize graph!
-        printstep = 1; // printstep determines report frequency in report()
+        CountLandunits(); // for output totals per landunit
 
         DEBUG("setupHydrographData()");
         setupHydrographData(); // reset hydrograph display
 
-        //bool saveMBerror = true;
-        //saveMBerror2file(true); //saveMBerror,
-
-        SetFlowBarriers();     // update the presence of flow barriers, static for now, unless breakthrough
-        GridCell();            // static for now
+        SetFlowBarriers();  // update the presence of flow barriers, static for now, unless breakthrough
+        GridCell();         // static for now
 
         _dt_user = _dt;
 
@@ -294,136 +274,157 @@ void TWorld::DoModel()
         GetComboMaps(); // moved to outside timeloop!
 
         InfilEffectiveKsat();
+    }
+    catch (...) {
+        bmiHasError = true;
+        if (bmiMode)
+            throw std::runtime_error(ErrorString.toStdString());
+        throw;
+    }
+}
+//---------------------------------------------------------------------------
+// per-event state reset: zero counters; IntializeData already set initial theta/WH/etc.
+void TWorld::ResetEvent()
+{
+    time = BeginTime;
+    runstep = 0;   // used to initialize graph
+    printstep = 1; // determines report frequency
+}
+//---------------------------------------------------------------------------
+// BMI Initialize: full setup + state reset (first-cut: full InitializeStatic each event)
+// TODO phase: add staticDone guard so InitializeStatic runs once per process config
+void TWorld::Initialize()
+{
+    bmiHasError = false;
+    InitializeStatic();
+    ResetEvent();
+}
+//---------------------------------------------------------------------------
+// BMI Update: advance exactly one _dt; returns true while time < EndTime
+bool TWorld::Update()
+{
+    try {
+        QTextStream consoleout(stdout);
 
-        // ---- THE TIME LOOP ----
-        for (time = BeginTime; time < EndTime; time += _dt)
-        {
-            // printstep determines report frequency in #define report(...)
-            if (runstep > 0 && runstep % printinterval == 0)
-                printstep++;
+        if (runstep > 0 && runstep % printinterval == 0)
+            printstep++;
 
-            runstep++;
+        runstep++;
 
-            if (!bmiMode && stopRequested) {
-                mutex.lock();
-                DEBUG("User interrupt... finishing time step");
-                time = EndTime;
-                mutex.unlock();
-            }
+        if (!bmiMode && stopRequested) {
+            mutex.lock();
+            DEBUG("User interrupt... finishing time step");
+            time = EndTime;
+            mutex.unlock();
+        }
 
-            if (!bmiMode && waitRequested) {
-                mutex.lock();
-                DEBUG("User pause...");
-                mu_condition.wait(&mutex);
-                mutex.unlock();
-            }
-            // check if user wants to quit or pause
+        if (!bmiMode && waitRequested) {
+            mutex.lock();
+            DEBUG("User pause...");
+            mu_condition.wait(&mutex);
+            mutex.unlock();
+        }
 
-            GetInputTimeseries(); // get rainfall, ET, snowmelt, discharge
+        GetInputTimeseries(); // get rainfall, ET, snowmelt, discharge
 
-            // bool dotime=false;
-            // FOR_ROW_COL_MV_L {
-            //     if (WH->Drc > 0 || ChannelWH->Drc > 0)
-            //         dotime = true;
-            // }}
-            // if (dotime)
-            //     _dt = 600;
-            // else
-            //     _dt =_dt_user;
+        InfilDynamicCrusting(); // if crusting recalc Ksateff and Poreff because of crusting effect
 
-            InfilDynamicCrusting(); // if crusting recalc Ksateff and Poreff becuase of crusting effect
+        HydrologyProcesses();  // hydrological processes in one loop, incl splash
 
-            HydrologyProcesses();  // hydrological processes in one loop, incl splash
+        ToTiledrain();  // fraction going into tiledrain directly from surface
 
-            ToTiledrain();  // fraction going into tiledrain directly from surface
+        OverlandFlow(); // overland flow 1D (non threaded), 2Ddyn (threaded), if 2Ddyn then also SWOFsediment!
 
-            OverlandFlow(); // overland flow 1D (non threaded), 2Ddyn (threaded), if 2Ddyn then also SWOFsediment!
+        // these are all non-threaded
+        ChannelFlowandErosion();    // do ordered LDD solutions channel, tiles, drains, non threaded
 
-            // if (SwitchIncludeChannel) {
-            //     ChannelRainandInfil();  // subtract infil, retention,  add rainfall
-            //     ChannelBaseflow();              // add stationary and GW baseflow if selected
-            // }
+        TileFlow();          // tile drain flow kin wave
 
-            // these are all non-threaded
-            ChannelFlowandErosion();    // do ordered LDD solutions channel, tiles, drains, non threaded
+        TotalsHydro();       // calculate all totals and cumulative values
+        TotalsFlow();
+        TotalsSediment();
 
-            TileFlow();          // tile drain flow kin wave
+        MassBalance();       // check water and sed mass balance
 
-            TotalsHydro();       // calculate all totals and cumulative values
-            TotalsFlow();
-            TotalsSediment();
+        reportToUI();        // fill the "op" structure for screen and file output and calc some COMBO output maps
 
-            MassBalance();       // check water and sed mass balance
+        reportToFile();      // report hydrogaphs, totals, maps etc to files
 
-            reportToUI();        // fill the "op" structure for screen and file output and calc some COMBO output maps
-
-            reportToFile();      // report hydrograhs, totals, maps etc to files
-            // reporting to file is done in nthe same thread, mdoes not need a mutex lock
-
-            // because showing is done outside the Thread in the GUI, a mutex.lock() is needed
-            // mu_condition gives a wakeAll() signal at the end of the display in showWorld()
-            if (!noInterface && !bmiMode) {
-                emit show(); // send the 'op' structure with data to function worldShow in LisUIModel.cpp
-                mutex.lock();
-                //qDebug() << "Model thread waiting at" << QTime::currentTime();
-                mu_condition.wait(&mutex);   // Wait for GUI to finish drawing
-                //qDebug() << "Model thread resumed at" << QTime::currentTime();
-                mutex.unlock();
-
-            }
-
-            //saveMBerror2file(false); //saveMBerror
-
-            // show progress in console without GUI
-            if (op.doBatchmode && noInterface) {
-                int x = 0;
-                x = std::round(op.t/op.maxtime * 100) ;
-                consoleout << "\rprogress: " << QString("step %1        %2 %   end time %3").arg(runstep).arg(x, -3).arg(op.maxtime) << "        ";
-                consoleout.flush();
-
-                // THIS SHOULD ALSO WORK IN LINUX ???
-            }
-        } // TIME LOOP
-
-        // if (SwitchEndRun)
-        //     ReportMaps();
-
+        // because showing is done outside the Thread in the GUI, a mutex.lock() is needed
+        // mu_condition gives a wakeAll() signal at the end of the display in showWorld()
         if (!noInterface && !bmiMode) {
-            // wrap up and close the thread
-            emit done("Finished");
+            emit show(); // send the 'op' structure with data to function worldShow in LisUIModel.cpp
+            mutex.lock();
+            mu_condition.wait(&mutex);   // Wait for GUI to finish drawing
+            mutex.unlock();
         }
 
-        if (op.doBatchmode && !bmiMode)
-        {
-            // delete all maps
-            qDeleteAll(maplistCTMap.begin(),maplistCTMap.end());
-            maplistCTMap.clear();
-
-            // //delete swatre 3D soil layer structure if exists
-            if (initSwatreStructure)
-                FreeSwatreInfo();
-
-            if (noInterface) {
-                consoleout << "\n\n Finished after "<< op.maxtime << "minutes";
-                consoleout.flush();
-                //QCoreApplication::quit();
-                // no longer used because app.exec() is not called, just let it exit
-            } else {
-                QApplication::quit();
-            }
-            // close the world model
+        // show progress in console without GUI
+        if (op.doBatchmode && noInterface) {
+            int x = std::round(op.t/op.maxtime * 100);
+            consoleout << "\rprogress: " << QString("step %1        %2 %   end time %3").arg(runstep).arg(x, -3).arg(op.maxtime) << "        ";
+            consoleout.flush();
         }
+
+        time += _dt;
+        return time < EndTime;
+    }
+    catch (...) {
+        bmiHasError = true;
+        if (bmiMode)
+            throw std::runtime_error(ErrorString.toStdString());
+        throw;
+    }
+}
+//---------------------------------------------------------------------------
+// BMI Finalize: free maps and swatre; emit done/quit only outside bmiMode
+void TWorld::Finalize()
+{
+    qDeleteAll(maplistCTMap.begin(), maplistCTMap.end());
+    maplistCTMap.clear();
+
+    if (initSwatreStructure)
+        FreeSwatreInfo();
+
+    if (bmiMode)
+        return;
+
+    // non-bmi cleanup
+    if (!noInterface) {
+        emit done("Finished");
+    }
+    if (op.doBatchmode) {
+        if (noInterface) {
+            QTextStream consoleout(stdout);
+            consoleout << "\n\n Finished after "<< op.maxtime << "minutes";
+            consoleout.flush();
+            //QCoreApplication::quit();
+            // no longer used because app.exec() is not called, just let it exit
+        } else {
+            QApplication::quit();
+        }
+    }
+}
+//---------------------------------------------------------------------------
+// the actual model with the main loop — delegates to Initialize/Update/Finalize
+void TWorld::DoModel()
+{
+    try {
+        Initialize();
+        while (time < EndTime) {
+            if (!Update())
+                break;
+        }
+        Finalize();
     }
     catch(...)  // if an error occurred
     {
         if (!noInterface && !bmiMode) {
             emit done("ERROR STOP: "+ErrorString);
         }
-        if (bmiMode) {
-            throw std::runtime_error(ErrorString.toStdString());
-        }
-        if (op.doBatchmode) {
+        if (op.doBatchmode && !bmiMode) {
             if (noInterface) {
+                QTextStream consoleout(stdout);
                 consoleout << "ERROR STOP "<< ErrorString;
                 consoleout.flush();
                 #ifdef Q_OS_WIN
