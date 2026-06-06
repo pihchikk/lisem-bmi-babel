@@ -33,6 +33,7 @@
 */
 
 #include <QtGui>
+#include <stdexcept>
 #include "lisemqt.h"
 #include "model.h"
 #include "global.h"
@@ -303,14 +304,14 @@ void TWorld::DoModel()
 
             runstep++;
 
-            if(stopRequested) {
+            if (!bmiMode && stopRequested) {
                 mutex.lock();
                 DEBUG("User interrupt... finishing time step");
                 time = EndTime;
                 mutex.unlock();
             }
 
-            if (waitRequested) {
+            if (!bmiMode && waitRequested) {
                 mutex.lock();
                 DEBUG("User pause...");
                 mu_condition.wait(&mutex);
@@ -361,7 +362,7 @@ void TWorld::DoModel()
 
             // because showing is done outside the Thread in the GUI, a mutex.lock() is needed
             // mu_condition gives a wakeAll() signal at the end of the display in showWorld()
-            if (!noInterface) {
+            if (!noInterface && !bmiMode) {
                 emit show(); // send the 'op' structure with data to function worldShow in LisUIModel.cpp
                 mutex.lock();
                 //qDebug() << "Model thread waiting at" << QTime::currentTime();
@@ -387,12 +388,12 @@ void TWorld::DoModel()
         // if (SwitchEndRun)
         //     ReportMaps();
 
-        if (!noInterface) {
+        if (!noInterface && !bmiMode) {
             // wrap up and close the thread
             emit done("Finished");
         }
 
-        if (op.doBatchmode)
+        if (op.doBatchmode && !bmiMode)
         {
             // delete all maps
             qDeleteAll(maplistCTMap.begin(),maplistCTMap.end());
@@ -415,8 +416,11 @@ void TWorld::DoModel()
     }
     catch(...)  // if an error occurred
     {
-        if (!noInterface) {
+        if (!noInterface && !bmiMode) {
             emit done("ERROR STOP: "+ErrorString);
+        }
+        if (bmiMode) {
+            throw std::runtime_error(ErrorString.toStdString());
         }
         if (op.doBatchmode) {
             if (noInterface) {

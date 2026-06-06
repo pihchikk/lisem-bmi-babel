@@ -1232,6 +1232,7 @@ int showc;
     bool stopRequested;
     bool waitRequested;
     bool noInterface;
+    bool bmiMode = false;  // headless BMI mode: no Qt waits, no quit, driven externally
     bool showInfo;
     bool noOutput;
     bool batchmode;
