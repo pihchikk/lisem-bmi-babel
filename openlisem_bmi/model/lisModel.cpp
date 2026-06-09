@@ -283,7 +283,13 @@ void TWorld::InitializeStatic()
     }
 }
 //---------------------------------------------------------------------------
-// per-event state reset: zero counters; IntializeData already set initial theta/WH/etc.
+// per-event state reset.
+// FIRST-CUT: только счётчики — InitializeStatic()->IntializeData() обнуляет
+// WH/theta/sediment на каждом событии, поэтому СЕЙЧАС этого достаточно.
+// !!! WARNING при включении кеша staticDone (InitializeStatic пропускается на повторе):
+//     ResetEvent станет ЕДИНСТВЕННЫМ per-event сбросом и ОБЯЗАН тогда также обнулять
+//     динамику (WH=0, V=0, Conc/sediment=0, mass-balance аккумуляторы=0) и пере-засевать
+//     начальную theta — иначе событие N+1 унаследует воду/седимент события N => тихий дрейф баланса.
 void TWorld::ResetEvent()
 {
     time = BeginTime;
@@ -293,6 +299,7 @@ void TWorld::ResetEvent()
 //---------------------------------------------------------------------------
 // BMI Initialize: full setup + state reset (first-cut: full InitializeStatic each event)
 // TODO phase: add staticDone guard so InitializeStatic runs once per process config
+// см. WARNING в ResetEvent перед включением кеша
 void TWorld::Initialize()
 {
     bmiHasError = false;
