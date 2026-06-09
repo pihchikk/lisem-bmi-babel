@@ -55,6 +55,7 @@ int main(int argc, char *argv[])
 
     QString runFileName;
     bool noInterface = false;
+    bool bmistep = false;
     bool forceRes = false;
     bool doBatch = false;
     bool syntax = true;
@@ -72,6 +73,9 @@ int main(int argc, char *argv[])
         QString arg = argv[i];
         if (arg == "-ni") {
             noInterface = true;
+        }
+        else if (arg == "-bmistep") {
+            bmistep = true;
         }
         if (arg == "-f") {
             forceRes = true;
@@ -175,7 +179,14 @@ int main(int argc, char *argv[])
             W.noInterface = noInterface;
 
             // don't use the QThread worldThread because there is no GUI, call DoModel directly
-            W.DoModel();
+            if (bmistep) {
+                W.bmiMode = true;
+                W.Initialize();
+                while (W.time < W.EndTime) { if (!W.Update()) break; }
+                W.Finalize();
+            } else {
+                W.DoModel();
+            }
             return 0;
             // return app.exec(); // DoModel has quit(); but that is not called properly, prevents DoModel from quiting properly
         }
