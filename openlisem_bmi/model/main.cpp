@@ -57,6 +57,7 @@ int main(int argc, char *argv[])
     bool noInterface = false;
     bool bmistep = false;
     bool bmistep2 = false;
+    bool bmistep2fresh = false;
     bool forceRes = false;
     bool doBatch = false;
     bool syntax = true;
@@ -80,6 +81,9 @@ int main(int argc, char *argv[])
         }
         else if (arg == "-bmistep2") {
             bmistep2 = true;
+        }
+        else if (arg == "-bmistep2fresh") {
+            bmistep2fresh = true;
         }
         if (arg == "-f") {
             forceRes = true;
@@ -183,7 +187,16 @@ int main(int argc, char *argv[])
             W.noInterface = noInterface;
 
             // don't use the QThread worldThread because there is no GUI, call DoModel directly
-            if (bmistep2) {
+            if (bmistep2fresh) {
+                for (int ev = 0; ev < 2; ev++) {
+                    TWorld Wf;
+                    Wf.noInterface = true; Wf.bmiMode = true; Wf.loc = QLocale::c();
+                    Wf.stopRequested = false; Wf.waitRequested = false;
+                    Wf.Initialize();
+                    while (Wf.time < Wf.EndTime) { if (!Wf.Update()) break; }
+                    Wf.Finalize();
+                }
+            } else if (bmistep2) {
                 W.bmiMode = true;
                 // event 1
                 W.Initialize(); while (W.time < W.EndTime) { if (!W.Update()) break; } W.Finalize();
