@@ -56,6 +56,7 @@ int main(int argc, char *argv[])
     QString runFileName;
     bool noInterface = false;
     bool bmistep = false;
+    bool bmistep2 = false;
     bool forceRes = false;
     bool doBatch = false;
     bool syntax = true;
@@ -76,6 +77,9 @@ int main(int argc, char *argv[])
         }
         else if (arg == "-bmistep") {
             bmistep = true;
+        }
+        else if (arg == "-bmistep2") {
+            bmistep2 = true;
         }
         if (arg == "-f") {
             forceRes = true;
@@ -179,7 +183,13 @@ int main(int argc, char *argv[])
             W.noInterface = noInterface;
 
             // don't use the QThread worldThread because there is no GUI, call DoModel directly
-            if (bmistep) {
+            if (bmistep2) {
+                W.bmiMode = true;
+                // event 1
+                W.Initialize(); while (W.time < W.EndTime) { if (!W.Update()) break; } W.Finalize();
+                // event 2 — повторный init из того же процесса (проверка чистоты re-init)
+                W.Initialize(); while (W.time < W.EndTime) { if (!W.Update()) break; } W.Finalize();
+            } else if (bmistep) {
                 W.bmiMode = true;
                 W.Initialize();
                 while (W.time < W.EndTime) { if (!W.Update()) break; }
