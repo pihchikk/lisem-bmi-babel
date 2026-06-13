@@ -170,7 +170,7 @@ int main(int argc, char *argv[])
             TWorld W;
 
             // deal with different digit symbols dot or comma
-            W.loc = QLocale::system(); // current locale
+            W.loc = QLocale::c();   // числа в runfile всегда с точкой; не зависим от системной локали
             W.loc.setNumberOptions(QLocale::c().numberOptions()); // borrow number options from the "C" locale
             QLocale::setDefault(W.loc);
 
