@@ -25,7 +25,7 @@ requirements = []
 github_username = "pihchikk"
 package_author = "pihchikk"
 package_author_email = "pihchikk@users.noreply.github.com"
-package_license = "GPLv3"
+package_license = "MIT License"
 summary = "Native in-process BMI for OpenLISEM"
 
 [ci]
