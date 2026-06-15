@@ -1284,11 +1284,11 @@ public slots:   //note, was private loop but dixygen does not recognize that
     void Initialize();   // = InitializeStatic() + ResetEvent()
     bool Update();       // advance one _dt; returns (time < EndTime)
     void Finalize();     // free maps/swatre; no quit
+    void ResetEvent();   // light per-event reset; may be called between events by coupler
 
 private:
     // internal engine — NOT on BMI surface
     void InitializeStatic();  // heavy setup: terrain, params, map allocation
-    void ResetEvent();        // light per-event reset: zero state, set initial theta
     bool bmiHasError = false;
 
 // private:

@@ -283,18 +283,73 @@ void TWorld::InitializeStatic()
     }
 }
 //---------------------------------------------------------------------------
-// per-event state reset.
-// FIRST-CUT: только счётчики — InitializeStatic()->IntializeData() обнуляет
-// WH/theta/sediment на каждом событии, поэтому СЕЙЧАС этого достаточно.
-// !!! WARNING при включении кеша staticDone (InitializeStatic пропускается на повторе):
-//     ResetEvent станет ЕДИНСТВЕННЫМ per-event сбросом и ОБЯЗАН тогда также обнулять
-//     динамику (WH=0, V=0, Conc/sediment=0, mass-balance аккумуляторы=0) и пере-засевать
-//     начальную theta — иначе событие N+1 унаследует воду/седимент события N => тихий дрейф баланса.
+// per-event state reset: счётчики + все динамические карты и скалярные аккумуляторы
+// из IntializeData(), БЕЗ переаллокации карт.
+// Вызывается: из Initialize() после InitializeStatic(), и напрямую купплером между событиями
+// (паттерн -bmireset2: один Initialize + N×[ResetEvent + Update*] + Finalize).
+// !!! WARNING при включении кеша staticDone:
+//     ResetEvent уже обнуляет WH/V/Q/инфильтрацию/аккумуляторы из IntializeData.
+//     ДОПОЛНИТЕЛЬНО понадобится: пере-засеять theta из input-карт (ThetaI1/ThetaI2),
+//     сбросить состояние каналов (ChannelWH/ChannelV/etc.) и восстановить Ksateff/Poreeff
+//     (сейчас задаётся InfilEffectiveKsat в InitializeStatic) — они не входят в IntializeData
+//     и поэтому отсутствуют в этом списке.
 void TWorld::ResetEvent()
 {
-    time = BeginTime;
-    runstep = 0;   // used to initialize graph
-    printstep = 1; // determines report frequency
+    // --- time counters ---
+    time      = BeginTime;
+    runstep   = 0;
+    printstep = 1;
+
+    // --- scalar mass-balance accumulators (mirrors IntializeData zero-inits) ---
+    MB = 0;  MBs = 0;
+    SoilETMBcorrection = 0;
+    InfilTot = 0;  InfilTotmm = 0;  InfilKWTot = 0;
+    IntercTot = 0;  IntercETaTot = 0;  IntercTotmm = 0;  IntercETaTotmm = 0;
+    ETaTot = 0;  ETaTotmm = 0;  ETaTotVol = 0;
+    GWlevel = 0;
+    theta1tot = 0;  theta2tot = 0;
+    thetai1tot = 0;  thetai2tot = 0;  thetai1cur = 0;  thetai2cur = 0;
+    BaseFlowTot = 0;  SoilMoistTot = 0;  SoilMoistDiff = 0;
+    IntercHouseTot = 0;  IntercHouseTotmm = 0;
+    IntercLitterTot = 0;  IntercLitterTotmm = 0;
+    WaterVolTot = 0;  WaterVolSoilTileTot = 0;  WaterVolTotmm = 0;  WaterVolRunoffmm = 0;
+    StormDrainTotmm = 0;  ChannelVolTot = 0;  QSideVolTot = 0;  StormDrainVolTot = 0;
+    floodVolTotmm = 0;  floodVolTot = 0;  floodVolTotMax = 0;  floodAreaMax = 0;
+    QBoundaryTot = 0;  floodBoundarySedTot = 0;
+    Qtot = 0;  Qtot_dt = 0;  QTile = 0;  QTiletot = 0;
+    QfloodoutTot = 0;  Qfloodout = 0;  Qtotmm = 0;  Qboundtotmm = 0;
+    GWdeeptot = 0;  Qpeak = 0;  QpeakTime = 0;
+    WHinitVolTot = 0;
+    BaseFlowInit = 0;
+    if (SwitchChannelBaseflowStationary)
+        BaseFlowInit = MapTotal(*BaseFlowInitialVolume);
+
+    // --- dynamic maps → fill non-MV cells to 0, no realloc ---
+    // Maps owned by InfilEffectiveKsat/GridCell (Ksateff, Poreeff, Thetaeff, FlowWidth, Alpha)
+    // are static-phase outputs and are NOT zeroed here.
+    auto zm = [&](cTMap *m) { if (m) FOR_ROW_COL_MV { m->Drc = 0.0; } };
+
+    // water heights and runoff state
+    zm(WH);  zm(WHrunoff);  zm(WHmax);  zm(WHstore);
+    zm(FloodWaterVol);  zm(RunoffWaterVol);
+    zm(hmxWH);  zm(hmx);  zm(hmxrunoff);
+    zm(FloodDomain);
+    // flood statistics
+    zm(floodHmxMax);  zm(floodVMax);  zm(floodVHMax);  zm(floodTime);
+    // flow state
+    zm(V);  zm(VH);  zm(Q);  zm(Qn);
+    zm(MicroStoreVol);
+    zm(WaterVolin);  zm(WaterVolall);
+    // infiltration dynamics (Green-Ampt front, cumulative volumes)
+    zm(InfilVolFlood);  zm(InfilVol);  zm(InfilmmCum);  zm(InfilVolCum);
+    zm(Perc);  zm(PercmmCum);  zm(Fcum);  zm(Lw);  zm(Lwmm);
+    // output accumulation maps
+    zm(QinKW);  zm(Qoutput);  zm(Qm3total);  zm(Qm3max);  zm(FHI);  zm(Qsoutput);
+    // display combo maps
+    zm(COMBO_SS);  zm(COMBO_BL);  zm(COMBO_TC);  zm(COMBO_V);
+    // conditional maps
+    if (SwitchDischargeUser)  zm(QuserIn);
+    if (SwitchWaveUser)     { zm(WHbound);  zm(WHboundRain); }
 }
 //---------------------------------------------------------------------------
 // BMI Initialize: full setup + state reset (first-cut: full InitializeStatic each event)
