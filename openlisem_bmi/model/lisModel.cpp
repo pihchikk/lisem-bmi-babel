@@ -300,8 +300,27 @@ void TWorld::InitializeStatic()
 // LIMITATION: Ksateff/Poreeff меняются только при динамической корке (InfilDynamicCrusting);
 //   при выключенном SwitchDynamicCrusting они статичны и здесь не восстанавливаются. Для кейса
 //   с динамической коркой нужен снапшот Ksateff/Poreeff после InfilEffectiveKsat (TODO).
+void TWorld::SnapshotInitialState()
+{
+    qDeleteAll(maplistInit);
+    maplistInit.clear();
+    for (int i = 0; i < maplistCTMap.size(); i++) {
+        cTMap *snap = new cTMap();
+        snap->data = maplistCTMap[i]->data;   // MaskedRaster<Real> operator= (deep copy)
+        maplistInit << snap;
+    }
+}
+//---------------------------------------------------------------------------
+void TWorld::RestoreInitialState()
+{
+    for (int i = 0; i < maplistCTMap.size() && i < maplistInit.size(); i++)
+        maplistCTMap[i]->data = maplistInit[i]->data;
+}
+//---------------------------------------------------------------------------
 void TWorld::ResetEvent()
 {
+    RestoreInitialState();
+
     // --- time counters ---
     time      = BeginTime;
     runstep   = 0;
@@ -330,58 +349,41 @@ void TWorld::ResetEvent()
     BaseFlowInit = 0;
     if (SwitchChannelBaseflowStationary)
         BaseFlowInit = MapTotal(*BaseFlowInitialVolume);
-
-    // --- dynamic maps → fill non-MV cells to 0, no realloc ---
-    // Maps owned by InfilEffectiveKsat/GridCell (Ksateff, Poreeff, FlowWidth, Alpha) are
-    // static-phase outputs and are NOT zeroed here. Thetaeff is restored below, not zeroed.
-    auto zm = [&](cTMap *m) { if (m) FOR_ROW_COL_MV { m->Drc = 0.0; } };
-
-    // water heights and runoff state
-    zm(WH);  zm(WHrunoff);  zm(WHmax);  zm(WHstore);
-    zm(FloodWaterVol);  zm(RunoffWaterVol);
-    zm(hmxWH);  zm(hmx);  zm(hmxrunoff);
-    zm(FloodDomain);
-    // flood statistics
-    zm(floodHmxMax);  zm(floodVMax);  zm(floodVHMax);  zm(floodTime);
-    // flow state
-    zm(V);  zm(VH);  zm(Q);  zm(Qn);
-    zm(MicroStoreVol);
-    zm(WaterVolin);  zm(WaterVolall);
-    // infiltration dynamics (Green-Ampt front, cumulative volumes)
-    zm(InfilVolFlood);  zm(InfilVol);  zm(InfilmmCum);  zm(InfilVolCum);
-    zm(Perc);  zm(PercmmCum);  zm(Fcum);  zm(Lw);  zm(Lwmm);
-    // output accumulation maps
-    zm(QinKW);  zm(Qoutput);  zm(Qm3total);  zm(Qm3max);  zm(FHI);  zm(Qsoutput);
-    // display combo maps
-    zm(COMBO_SS);  zm(COMBO_BL);  zm(COMBO_TC);  zm(COMBO_V);
-    // conditional maps
-    if (SwitchDischargeUser)  zm(QuserIn);
-    if (SwitchWaveUser)     { zm(WHbound);  zm(WHboundRain); }
-
-    // --- soil moisture: восстановить начальную θ из входа (НЕ обнулять) ---
-    // ThetaI1/ThetaI2 дрейфуют (percolation); ThetaI1a/ThetaI2a — нетронутые копии входа.
-    if (SwitchInfiltration && InfilMethod != INFIL_SWATRE) {
-        if (ThetaI1 && ThetaI1a)
-            copy(*ThetaI1, *ThetaI1a);                 // restore layer-1 initial θ
-        if (SwitchTwoLayer && ThetaI2 && ThetaI2a)
-            copy(*ThetaI2, *ThetaI2a);                 // restore layer-2 initial θ
-        // Thetaeff initial value as set by InfilEffectiveKsat(): qMax(ThetaR1, ThetaI1)
-        if (Thetaeff && ThetaR1 && ThetaI1) {
-            FOR_ROW_COL_MV {
-                Thetaeff->Drc = qMax(ThetaR1->Drc, ThetaI1->Drc);
-            }
-        }
-    }
 }
 //---------------------------------------------------------------------------
-// BMI Initialize: full setup + state reset (first-cut: full InitializeStatic each event)
-// TODO phase: add staticDone guard so InitializeStatic runs once per process config
-// см. WARNING в ResetEvent перед включением кеша
 void TWorld::Initialize()
 {
     bmiHasError = false;
     InitializeStatic();
-    ResetEvent();
+    SnapshotInitialState();
+
+    // scalar resets (same set as ResetEvent, applied once after static setup)
+    time      = BeginTime;
+    runstep   = 0;
+    printstep = 1;
+
+    MB = 0;  MBs = 0;
+    SoilETMBcorrection = 0;
+    InfilTot = 0;  InfilTotmm = 0;  InfilKWTot = 0;
+    IntercTot = 0;  IntercETaTot = 0;  IntercTotmm = 0;  IntercETaTotmm = 0;
+    ETaTot = 0;  ETaTotmm = 0;  ETaTotVol = 0;
+    GWlevel = 0;
+    theta1tot = 0;  theta2tot = 0;
+    thetai1tot = 0;  thetai2tot = 0;  thetai1cur = 0;  thetai2cur = 0;
+    BaseFlowTot = 0;  SoilMoistTot = 0;  SoilMoistDiff = 0;
+    IntercHouseTot = 0;  IntercHouseTotmm = 0;
+    IntercLitterTot = 0;  IntercLitterTotmm = 0;
+    WaterVolTot = 0;  WaterVolSoilTileTot = 0;  WaterVolTotmm = 0;  WaterVolRunoffmm = 0;
+    StormDrainTotmm = 0;  ChannelVolTot = 0;  QSideVolTot = 0;  StormDrainVolTot = 0;
+    floodVolTotmm = 0;  floodVolTot = 0;  floodVolTotMax = 0;  floodAreaMax = 0;
+    QBoundaryTot = 0;  floodBoundarySedTot = 0;
+    Qtot = 0;  Qtot_dt = 0;  QTile = 0;  QTiletot = 0;
+    QfloodoutTot = 0;  Qfloodout = 0;  Qtotmm = 0;  Qboundtotmm = 0;
+    GWdeeptot = 0;  Qpeak = 0;  QpeakTime = 0;
+    WHinitVolTot = 0;
+    BaseFlowInit = 0;
+    if (SwitchChannelBaseflowStationary)
+        BaseFlowInit = MapTotal(*BaseFlowInitialVolume);
 }
 //---------------------------------------------------------------------------
 // BMI Update: advance exactly one _dt; returns true while time < EndTime
@@ -464,6 +466,9 @@ bool TWorld::Update()
 // BMI Finalize: free maps and swatre; emit done/quit only outside bmiMode
 void TWorld::Finalize()
 {
+    qDeleteAll(maplistInit);
+    maplistInit.clear();
+
     qDeleteAll(maplistCTMap.begin(), maplistCTMap.end());
     maplistCTMap.clear();
 

@@ -424,6 +424,7 @@ public:
     /// map management structure, automatic adding and deleting of all cTMap variables
     //MapListStruct maplistCTMap[NUMNAMES];
     QVector <cTMap*> maplistCTMap;
+    QList   <cTMap*> maplistInit;  // snapshot of post-InitializeStatic map data for ResetEvent
     int maplistnr;
 
 //---------------------------------------
@@ -1281,15 +1282,17 @@ public slots:   //note, was private loop but dixygen does not recognize that
     // void onStop();
 
     // BMI surface (standard lifecycle)
-    void Initialize();   // = InitializeStatic() + ResetEvent()
+    void Initialize();   // InitializeStatic + SnapshotInitialState + scalar resets
     bool Update();       // advance one _dt; returns (time < EndTime)
     void Finalize();     // free maps/swatre; no quit
-    void ResetEvent();   // light per-event reset; may be called between events by coupler
+    void ResetEvent();   // RestoreInitialState + scalar resets; call between events
     void DumpState(QString dir); // write maplistCTMap totals + key scalars to dir/state.txt
 
 private:
     // internal engine — NOT on BMI surface
-    void InitializeStatic();  // heavy setup: terrain, params, map allocation
+    void InitializeStatic();       // heavy setup: terrain, params, map allocation
+    void SnapshotInitialState();   // copy maplistCTMap[i]->data into maplistInit
+    void RestoreInitialState();    // copy maplistInit[i]->data back into maplistCTMap[i]
     bool bmiHasError = false;
 
 // private:
