@@ -1285,6 +1285,7 @@ public slots:   //note, was private loop but dixygen does not recognize that
     bool Update();       // advance one _dt; returns (time < EndTime)
     void Finalize();     // free maps/swatre; no quit
     void ResetEvent();   // light per-event reset; may be called between events by coupler
+    void DumpState(QString dir); // write maplistCTMap totals + key scalars to dir/state.txt
 
 private:
     // internal engine — NOT on BMI surface

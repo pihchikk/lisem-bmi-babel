@@ -33,6 +33,9 @@
 */
 
 #include <QtGui>
+#include <QFile>
+#include <QTextStream>
+#include <QDir>
 #include <stdexcept>
 #include "lisemqt.h"
 #include "model.h"
@@ -622,6 +625,23 @@ void TWorld::HydrologyProcesses()
     // if (InfilMethod != INFIL_SOAP)
     //     SoilMoistDiff = soiltot2 - soiltot1;
 
+}
+//---------------------------------------------------------------------------
+void TWorld::DumpState(QString dir)
+{
+    QDir().mkpath(dir);
+    QFile f(dir + "/state.txt");
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return;
+    QTextStream out(&f);
+    for (int i = 0; i < maplistCTMap.size(); i++) {
+        cTMap *m = maplistCTMap[i];
+        out << i << "\t" << m->mapName() << "\t"
+            << QString::number(MapTotal(*m), 'g', 15) << "\n";
+    }
+    // также пара скаляров для случая «карты совпали, а физика разошлась»:
+    out << "_time\t\t"    << QString::number(time, 'g', 15) << "\n";
+    out << "_runstep\t\t" << runstep << "\n";
+    f.close();
 }
 //---------------------------------------------------------------------------
 

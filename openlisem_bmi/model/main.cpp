@@ -59,6 +59,7 @@ int main(int argc, char *argv[])
     bool bmistep2 = false;
     bool bmistep2fresh = false;
     bool bmireset2 = false;
+    bool bmidiag = false;
     bool forceRes = false;
     bool doBatch = false;
     bool syntax = true;
@@ -88,6 +89,9 @@ int main(int argc, char *argv[])
         }
         else if (arg == "-bmireset2") {
             bmireset2 = true;
+        }
+        else if (arg == "-bmidiag") {
+            bmidiag = true;
         }
         if (arg == "-f") {
             forceRes = true;
@@ -191,7 +195,16 @@ int main(int argc, char *argv[])
             W.noInterface = noInterface;
 
             // don't use the QThread worldThread because there is no GUI, call DoModel directly
-            if (bmireset2) {
+            if (bmidiag) {
+                W.bmiMode = true;
+                W.Initialize();
+                W.DumpState("/tmp/st_init");                                  // старт события 1
+                while (W.time < W.EndTime) { if (!W.Update()) break; }        // событие 1
+                W.ResetEvent();
+                W.DumpState("/tmp/st_reset");                                 // старт события 2 (должен == st_init)
+                while (W.time < W.EndTime) { if (!W.Update()) break; }        // событие 2
+                W.Finalize();
+            } else if (bmireset2) {
                 W.bmiMode = true;
                 W.Initialize();                         // один раз: static + первый ResetEvent
                 while (W.time < W.EndTime) { if (!W.Update()) break; }   // событие 1
