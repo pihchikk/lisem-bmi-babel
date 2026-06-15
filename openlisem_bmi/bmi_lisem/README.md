@@ -23,12 +23,15 @@ All variable / grid / getter / setter methods throw
 `std::runtime_error("<method>: not implemented (B2/B3)")` until wired to
 `TWorld` maps in later phases.
 
-## Build (opt-in, not part of default build)
+## Build
+
+The targets are part of the normal CMake configuration (no extra flag):
 
 ```sh
-cmake -S openlisem_bmi -B build -DLISEM_BUILD_BMI=ON
+cmake -S openlisem_bmi -B build
 cmake --build build --target lisem_bmi_test
 ```
 
 Targets: `bmilisem` (static lib = model objects + wrapper) and
-`lisem_bmi_test` (driver).
+`lisem_bmi_test` (driver). The default `Lisem` executable is a separate,
+unaffected target.
