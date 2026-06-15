@@ -1,0 +1,24 @@
+# Draft babelizer configuration for the native OpenLISEM BMI.
+# Wraps the C++ bmi::Bmi component (BmiLisem) into a Python package.
+# Build the shared library first (libbmilisem.so) in ../build, then run babelize.
+
+[library.BmiLisem]
+language = "c++"
+library  = "bmilisem"
+header   = "BmiLisem.h"
+entry_point = "BmiLisem"
+
+[build]
+libraries    = ["bmilisem", "gdal", "Qt6Core"]   # qwt/others to be added when the linker asks
+library_dirs = ["../build"]
+include_dirs = ["../include", "."]
+
+[package]
+name = "bmi_lisem"
+
+[info]
+github_username = "pihchikk"
+package_author  = "pihchikk"
+package_author_email = "pihchikk@users.noreply.github.com"
+package_license = "GPLv3"
+summary = "Native in-process BMI for OpenLISEM"

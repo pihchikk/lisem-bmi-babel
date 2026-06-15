@@ -227,15 +227,21 @@ target_link_libraries(Lisem
 
 #---------------------------------------------------------------------------
 # Native C++ BMI (bmi::Bmi) wrapper around TWorld.
-# Built unconditionally: targets `bmilisem` (static lib) and `lisem_bmi_test`.
-# The default `Lisem` executable is a separate target and is unaffected.
+# Built unconditionally. The default `Lisem` executable is a separate target
+# and is unaffected.
+#
+# Targets:
+#   bmilisem         SHARED  -> libbmilisem.so   (babelizer links against this)
+#   bmilisem_static  STATIC  -> libbmilisem_static.a
+#   lisem_bmi_test   exe     (lifecycle driver, == ./Lisem -ni -bmistep)
 #---------------------------------------------------------------------------
 # Reuse the full model/UI sources, minus model/main.cpp (it defines main()).
 SET(BMI_MODEL_SOURCES ${APP_SOURCES})
 LIST(REMOVE_ITEM BMI_MODEL_SOURCES model/main.cpp)
 
-# Static library: model objects + BMI wrapper (+ generated MOC/UI/RCC).
-add_library(bmilisem STATIC
+# Compile model objects + BMI wrapper once, as PIC, so both the shared and the
+# static library can reuse them without recompiling.
+add_library(bmilisem_obj OBJECT
     ${UI_SOURCES}
     ${RCC_SOURCES}
     ${BMI_MODEL_SOURCES}
@@ -244,17 +250,35 @@ add_library(bmilisem STATIC
     bmi_lisem/BmiLisem.h
     include/bmi.hxx
 )
-target_include_directories(bmilisem PUBLIC
+set_target_properties(bmilisem_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(bmilisem_obj PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/bmi_lisem
 )
-target_link_libraries(bmilisem
+
+SET(BMI_LINK_LIBS
     Qt6::Widgets Qt6::Gui Qt6::Core Qt6::Network
     ${GDAL_LIBRARIES} ${QWT_LIBRARIES} ${OSSL_LIBRARIES}
     OpenMP::OpenMP_CXX
 )
 
+# Shared library — the artifact babelizer links against (libbmilisem.so).
+add_library(bmilisem SHARED $<TARGET_OBJECTS:bmilisem_obj>)
+target_include_directories(bmilisem PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/bmi_lisem
+)
+target_link_libraries(bmilisem ${BMI_LINK_LIBS})
+
+# Static library — convenient for in-tree linking (libbmilisem_static.a).
+add_library(bmilisem_static STATIC $<TARGET_OBJECTS:bmilisem_obj>)
+target_include_directories(bmilisem_static PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/bmi_lisem
+)
+target_link_libraries(bmilisem_static ${BMI_LINK_LIBS})
+
 # Minimal driver exercising the BMI lifecycle (== ./Lisem -ni -bmistep).
 add_executable(lisem_bmi_test bmi_lisem/lisem_bmi_test.cpp)
-target_link_libraries(lisem_bmi_test bmilisem)
+target_link_libraries(lisem_bmi_test bmilisem_static)
 

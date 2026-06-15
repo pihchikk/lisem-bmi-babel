@@ -270,3 +270,13 @@ void BmiLisem::GetGridEdgeNodes(const int /*grid*/, int * /*edge_nodes*/) { BMI_
 void BmiLisem::GetGridFaceEdges(const int /*grid*/, int * /*face_edges*/) { BMI_NOT_IMPLEMENTED(); }
 void BmiLisem::GetGridFaceNodes(const int /*grid*/, int * /*face_nodes*/) { BMI_NOT_IMPLEMENTED(); }
 void BmiLisem::GetGridNodesPerFace(const int /*grid*/, int * /*nodes_per_face*/) { BMI_NOT_IMPLEMENTED(); }
+
+//---------------------------------------------------------------------------
+// C factory (CSDMS / babelizer convention for C++ BMI components).
+// babelizer's generated Cython binding calls bmi_model() to obtain an
+// instance and bmi_model_free() to dispose of it.
+//---------------------------------------------------------------------------
+extern "C" {
+    bmi::Bmi *bmi_model() { return new BmiLisem(); }
+    void bmi_model_free(bmi::Bmi *m) { delete m; }
+}
