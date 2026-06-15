@@ -14,8 +14,9 @@
 #include <QString>
 #include <QFileInfo>
 
-#include "model.h"    // TWorld
-#include "global.h"   // extern output op
+#include "LisUIoutput.h"  // defines 'output' struct — must precede global.h
+#include "model.h"        // TWorld
+#include "global.h"       // extern output op
 
 // Helper to keep stub bodies short and self-describing.
 #define BMI_NOT_IMPLEMENTED() \
