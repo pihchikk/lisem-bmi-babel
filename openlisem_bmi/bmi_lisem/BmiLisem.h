@@ -14,11 +14,13 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 #include "bmi.hxx"
 #include "fixture.h"  // RAII GDAL driver registration (mirrors main.cpp Fixture fixture)
 
 class TWorld;  // forward declaration: keep Qt/model headers out of this header
+class cTMap;   // forward declaration: map pointers only, no Qt/model headers here
 
 class BmiLisem : public bmi::Bmi
 {
@@ -90,9 +92,23 @@ public:
     // rainfall events without re-reading the static terrain/parameters.
     void ResetEvent();
 
+    // Diagnostic access to the underlying engine (NOT part of BMI; used by
+    // the test driver to cross-check GetValue against MapTotal).
+    TWorld *debugModel() const { return model; }
+
 private:
     Fixture _gdal_fixture;  // FIRST member: registers GDAL drivers before any map I/O
     TWorld *model = nullptr;
+
+    // Output variable registry, populated by Initialize() once maps are allocated.
+    std::vector<std::string>          _out_names;   // stable iteration order
+    std::map<std::string, cTMap*>     _out_maps;    // name -> model map pointer
+    std::map<std::string, std::string> _out_units;  // name -> BMI units string
+
+    void buildVarRegistry();          // wire standard names to TWorld maps
+    cTMap *resolveVar(const std::string &name) const;  // throws if unknown
+    int nCells() const;               // _nrRows * _nrCols (== GetGridSize(0))
+    cTMap *refMap() const;            // a guaranteed-allocated map for grid geometry
 };
 
 #endif // BMILISEM_H
