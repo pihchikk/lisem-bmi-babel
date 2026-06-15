@@ -97,6 +97,11 @@ void BmiLisem::buildVarRegistry()
         if (d.in)  { _in_names.emplace_back(d.name);  _in_maps[d.name]  = d.map; }
         if (d.out) { _out_names.emplace_back(d.name); _out_maps[d.name] = d.map; }
     }
+
+    // Scalar control signal (grid 1, rank 0): writing any value triggers ResetEvent.
+    // Kept outside the map-based registry because it has no backing cTMap.
+    _in_names.emplace_back("model__reset_event");
+    _all_units["model__reset_event"] = "1";
 }
 
 cTMap *BmiLisem::resolveVar(const std::string &name) const
@@ -180,12 +185,20 @@ std::vector<std::string> BmiLisem::GetOutputVarNames() { return _out_names; }
 //---------------------------------------------------------------------------
 // Variable information (stubbed)
 //---------------------------------------------------------------------------
-int BmiLisem::GetVarGrid(std::string name)      { resolveVar(name); return 0; }
-std::string BmiLisem::GetVarType(std::string name)  { resolveVar(name); return "double"; }
-std::string BmiLisem::GetVarUnits(std::string name) { resolveVar(name); return _all_units.at(name); }
-int BmiLisem::GetVarItemsize(std::string name)  { resolveVar(name); return static_cast<int>(sizeof(Real)); }
-int BmiLisem::GetVarNbytes(std::string name)    { resolveVar(name); return nCells() * static_cast<int>(sizeof(Real)); }
-std::string BmiLisem::GetVarLocation(std::string name) { resolveVar(name); return "node"; }
+static bool isScalarControl(const std::string &name) { return name == "model__reset_event"; }
+
+int BmiLisem::GetVarGrid(std::string name)
+{   if (isScalarControl(name)) return 1;  resolveVar(name); return 0; }
+std::string BmiLisem::GetVarType(std::string name)
+{   if (isScalarControl(name)) return "double";  resolveVar(name); return "double"; }
+std::string BmiLisem::GetVarUnits(std::string name)
+{   if (isScalarControl(name)) return "1";  resolveVar(name); return _all_units.at(name); }
+int BmiLisem::GetVarItemsize(std::string name)
+{   if (isScalarControl(name)) return 8;  resolveVar(name); return static_cast<int>(sizeof(Real)); }
+int BmiLisem::GetVarNbytes(std::string name)
+{   if (isScalarControl(name)) return 8;  resolveVar(name); return nCells() * static_cast<int>(sizeof(Real)); }
+std::string BmiLisem::GetVarLocation(std::string name)
+{   if (isScalarControl(name)) return "node";  resolveVar(name); return "node"; }
 
 //---------------------------------------------------------------------------
 // Variable getters (stubbed)
@@ -209,6 +222,9 @@ void BmiLisem::GetValueAtIndices(std::string /*name*/, void * /*dest*/, int * /*
 //---------------------------------------------------------------------------
 void BmiLisem::SetValue(std::string name, void *src)
 {
+    // Control signal: any write triggers ResetEvent; the buffer value is ignored.
+    if (name == "model__reset_event") { model->ResetEvent(); return; }
+
     cTMap *m = resolveVar(name);
     const size_t nbytes = m->data.nr_cells() * sizeof(Real);
     std::memcpy(&m->data.cell(0), src, nbytes);
@@ -227,16 +243,20 @@ void BmiLisem::SetValueAtIndices(std::string name, int *inds, int count, void *s
 //---------------------------------------------------------------------------
 static void checkGrid(const int grid)
 {
-    if (grid != 0)
-        throw std::runtime_error("BmiLisem: only grid 0 exists");
+    if (grid != 0 && grid != 1)
+        throw std::runtime_error("BmiLisem: valid grid ids are 0 (raster) and 1 (scalar)");
 }
 
-int BmiLisem::GetGridRank(const int grid) { checkGrid(grid); return 2; }
-int BmiLisem::GetGridSize(const int grid) { checkGrid(grid); return nCells(); }
-std::string BmiLisem::GetGridType(const int grid) { checkGrid(grid); return "uniform_rectilinear"; }
+int BmiLisem::GetGridRank(const int grid) { checkGrid(grid); return (grid == 1) ? 0 : 2; }
+int BmiLisem::GetGridSize(const int grid) { checkGrid(grid); return (grid == 1) ? 1 : nCells(); }
+std::string BmiLisem::GetGridType(const int grid) {
+    checkGrid(grid);
+    return (grid == 1) ? "scalar" : "uniform_rectilinear";
+}
 
 void BmiLisem::GetGridShape(const int grid, int *shape)
 {
+    if (grid == 1) return;   // rank-0 scalar: no shape
     checkGrid(grid);
     shape[0] = model->_nrRows;   // rows  (y)
     shape[1] = model->_nrCols;   // cols  (x)
@@ -244,6 +264,7 @@ void BmiLisem::GetGridShape(const int grid, int *shape)
 
 void BmiLisem::GetGridSpacing(const int grid, double *spacing)
 {
+    if (grid == 1) return;   // rank-0 scalar: no spacing
     checkGrid(grid);
     const double cs = refMap()->cellSize();
     spacing[0] = cs;   // y spacing
@@ -252,6 +273,7 @@ void BmiLisem::GetGridSpacing(const int grid, double *spacing)
 
 void BmiLisem::GetGridOrigin(const int grid, double *origin)
 {
+    if (grid == 1) return;   // rank-0 scalar: no origin
     checkGrid(grid);
     cTMap *m = refMap();
     origin[0] = m->north();   // y origin
