@@ -14,9 +14,9 @@
 #include <QString>
 #include <QFileInfo>
 
-#include "LisUIoutput.h"  // defines 'output' struct — must precede global.h
-#include "model.h"        // TWorld
-#include "global.h"       // extern output op
+#include "model.h"        // TWorld; defines LDD_COORIN used by LisUIoutput.h
+#include "LisUIoutput.h"  // defines 'output' struct (needs model.h first)
+#include "global.h"       // extern output op (needs LisUIoutput.h first)
 
 // Helper to keep stub bodies short and self-describing.
 #define BMI_NOT_IMPLEMENTED() \
