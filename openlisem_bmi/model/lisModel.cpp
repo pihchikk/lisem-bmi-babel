@@ -40,6 +40,7 @@
 #include "lisemqt.h"
 #include "model.h"
 #include "global.h"
+#include "operation.h"   // free copy(cTMap&, cTMap const&) used in ResetEvent
 
 
 //---------------------------------------------------------------------------
@@ -287,15 +288,18 @@ void TWorld::InitializeStatic()
 }
 //---------------------------------------------------------------------------
 // per-event state reset: счётчики + все динамические карты и скалярные аккумуляторы
-// из IntializeData(), БЕЗ переаллокации карт.
+// из IntializeData(), БЕЗ переаллокации карт, + восстановление начальной θ из входа.
 // Вызывается: из Initialize() после InitializeStatic(), и напрямую купплером между событиями
 // (паттерн -bmireset2: один Initialize + N×[ResetEvent + Update*] + Finalize).
-// !!! WARNING при включении кеша staticDone:
-//     ResetEvent уже обнуляет WH/V/Q/инфильтрацию/аккумуляторы из IntializeData.
-//     ДОПОЛНИТЕЛЬНО понадобится: пере-засеять theta из input-карт (ThetaI1/ThetaI2),
-//     сбросить состояние каналов (ChannelWH/ChannelV/etc.) и восстановить Ksateff/Poreeff
-//     (сейчас задаётся InfilEffectiveKsat в InitializeStatic) — они не входят в IntializeData
-//     и поэтому отсутствуют в этом списке.
+// Цель: состояние после ResetEvent == состояние после первого Initialize.
+//   - allocation/чтение статики/сетка/каналы/параметры — НЕ трогаем (остаются в InitializeStatic);
+//   - динамику обнуляем (как NewMap(0) в IntializeData);
+//   - θ (Thetaeff/ThetaI1/ThetaI2) НЕ обнуляем, а ПЕРЕСЧИТЫВАЕМ к начальному значению из входа
+//     (ThetaI1a/ThetaI2a — нетронутые копии входа; Thetaeff = qMax(ThetaR1,ThetaI1) как в
+//     InfilEffectiveKsat). InfilEffectiveKsat() НЕЛЬЗЯ перевызывать — она конвертирует Ksat1 in-place.
+// LIMITATION: Ksateff/Poreeff меняются только при динамической корке (InfilDynamicCrusting);
+//   при выключенном SwitchDynamicCrusting они статичны и здесь не восстанавливаются. Для кейса
+//   с динамической коркой нужен снапшот Ksateff/Poreeff после InfilEffectiveKsat (TODO).
 void TWorld::ResetEvent()
 {
     // --- time counters ---
@@ -328,8 +332,8 @@ void TWorld::ResetEvent()
         BaseFlowInit = MapTotal(*BaseFlowInitialVolume);
 
     // --- dynamic maps → fill non-MV cells to 0, no realloc ---
-    // Maps owned by InfilEffectiveKsat/GridCell (Ksateff, Poreeff, Thetaeff, FlowWidth, Alpha)
-    // are static-phase outputs and are NOT zeroed here.
+    // Maps owned by InfilEffectiveKsat/GridCell (Ksateff, Poreeff, FlowWidth, Alpha) are
+    // static-phase outputs and are NOT zeroed here. Thetaeff is restored below, not zeroed.
     auto zm = [&](cTMap *m) { if (m) FOR_ROW_COL_MV { m->Drc = 0.0; } };
 
     // water heights and runoff state
@@ -353,6 +357,21 @@ void TWorld::ResetEvent()
     // conditional maps
     if (SwitchDischargeUser)  zm(QuserIn);
     if (SwitchWaveUser)     { zm(WHbound);  zm(WHboundRain); }
+
+    // --- soil moisture: восстановить начальную θ из входа (НЕ обнулять) ---
+    // ThetaI1/ThetaI2 дрейфуют (percolation); ThetaI1a/ThetaI2a — нетронутые копии входа.
+    if (SwitchInfiltration && InfilMethod != INFIL_SWATRE) {
+        if (ThetaI1 && ThetaI1a)
+            copy(*ThetaI1, *ThetaI1a);                 // restore layer-1 initial θ
+        if (SwitchTwoLayer && ThetaI2 && ThetaI2a)
+            copy(*ThetaI2, *ThetaI2a);                 // restore layer-2 initial θ
+        // Thetaeff initial value as set by InfilEffectiveKsat(): qMax(ThetaR1, ThetaI1)
+        if (Thetaeff && ThetaR1 && ThetaI1) {
+            FOR_ROW_COL_MV {
+                Thetaeff->Drc = qMax(ThetaR1->Drc, ThetaI1->Drc);
+            }
+        }
+    }
 }
 //---------------------------------------------------------------------------
 // BMI Initialize: full setup + state reset (first-cut: full InitializeStatic each event)
