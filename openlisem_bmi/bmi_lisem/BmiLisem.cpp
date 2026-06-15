@@ -72,32 +72,37 @@ void BmiLisem::Initialize(std::string config_file)
 //---------------------------------------------------------------------------
 void BmiLisem::buildVarRegistry()
 {
-    _out_names.clear();
-    _out_maps.clear();
-    _out_units.clear();
+    _out_names.clear(); _out_maps.clear();
+    _in_names.clear();  _in_maps.clear();
+    _all_maps.clear();  _all_units.clear();
 
-    // standard_name -> (TWorld map, BMI units). Order defines GetOutputVarNames().
-    struct VarDef { const char *name; cTMap *map; const char *units; };
+    // Each entry: name, map pointer, units string, is_input, is_output.
+    struct VarDef { const char *name; cTMap *map; const char *units; bool in; bool out; };
     const VarDef defs[] = {
-        { "land_surface_water__depth",       model->WH,      "m"      },
-        { "channel_water__volume_flow_rate", model->Qn,      "m3 s-1" },
-        { "soil_water__volume_fraction",     model->ThetaI1, "m3 m-3" },
-        { "soil_water__infiltration_depth",  model->Fcum,    "m"      },
+        // outputs
+        { "land_surface_water__depth",       model->WH,      "m",      false, true  },
+        { "channel_water__volume_flow_rate", model->Qn,      "m3 s-1", false, true  },
+        { "soil_water__infiltration_depth",  model->Fcum,    "m",      false, true  },
+        // input + output
+        { "soil_water__volume_fraction",     model->ThetaI1, "m3 m-3", true,  true  },
+        // input-only
+        { "land_vegetation__cover_fraction", model->Cover,   "1",      true,  false },
     };
 
     for (const VarDef &d : defs) {
         if (!d.map)
-            continue;  // skip variables whose map is inactive for this run config
-        _out_names.emplace_back(d.name);
-        _out_maps[d.name]  = d.map;
-        _out_units[d.name] = d.units;
+            continue;  // map inactive for this run config
+        _all_maps[d.name]  = d.map;
+        _all_units[d.name] = d.units;
+        if (d.in)  { _in_names.emplace_back(d.name);  _in_maps[d.name]  = d.map; }
+        if (d.out) { _out_names.emplace_back(d.name); _out_maps[d.name] = d.map; }
     }
 }
 
 cTMap *BmiLisem::resolveVar(const std::string &name) const
 {
-    auto it = _out_maps.find(name);
-    if (it == _out_maps.end())
+    auto it = _all_maps.find(name);
+    if (it == _all_maps.end())
         throw std::runtime_error("BmiLisem: unknown variable '" + name + "'");
     return it->second;
 }
@@ -167,9 +172,9 @@ std::string BmiLisem::GetTimeUnits() { return "s"; }
 //---------------------------------------------------------------------------
 std::string BmiLisem::GetComponentName() { return "OpenLISEM"; }
 
-int BmiLisem::GetInputItemCount()  { return 0; }  // no input vars wired yet (B3)
+int BmiLisem::GetInputItemCount()  { return static_cast<int>(_in_names.size()); }
 int BmiLisem::GetOutputItemCount() { return static_cast<int>(_out_names.size()); }
-std::vector<std::string> BmiLisem::GetInputVarNames()  { return {}; }
+std::vector<std::string> BmiLisem::GetInputVarNames()  { return _in_names; }
 std::vector<std::string> BmiLisem::GetOutputVarNames() { return _out_names; }
 
 //---------------------------------------------------------------------------
@@ -177,7 +182,7 @@ std::vector<std::string> BmiLisem::GetOutputVarNames() { return _out_names; }
 //---------------------------------------------------------------------------
 int BmiLisem::GetVarGrid(std::string name)      { resolveVar(name); return 0; }
 std::string BmiLisem::GetVarType(std::string name)  { resolveVar(name); return "double"; }
-std::string BmiLisem::GetVarUnits(std::string name) { resolveVar(name); return _out_units.at(name); }
+std::string BmiLisem::GetVarUnits(std::string name) { resolveVar(name); return _all_units.at(name); }
 int BmiLisem::GetVarItemsize(std::string name)  { resolveVar(name); return static_cast<int>(sizeof(Real)); }
 int BmiLisem::GetVarNbytes(std::string name)    { resolveVar(name); return nCells() * static_cast<int>(sizeof(Real)); }
 std::string BmiLisem::GetVarLocation(std::string name) { resolveVar(name); return "node"; }
@@ -202,8 +207,20 @@ void BmiLisem::GetValueAtIndices(std::string /*name*/, void * /*dest*/, int * /*
 //---------------------------------------------------------------------------
 // Variable setters (stubbed)
 //---------------------------------------------------------------------------
-void BmiLisem::SetValue(std::string /*name*/, void * /*src*/) { BMI_NOT_IMPLEMENTED(); }
-void BmiLisem::SetValueAtIndices(std::string /*name*/, int * /*inds*/, int /*count*/, void * /*src*/) { BMI_NOT_IMPLEMENTED(); }
+void BmiLisem::SetValue(std::string name, void *src)
+{
+    cTMap *m = resolveVar(name);
+    const size_t nbytes = m->data.nr_cells() * sizeof(Real);
+    std::memcpy(&m->data.cell(0), src, nbytes);
+}
+
+void BmiLisem::SetValueAtIndices(std::string name, int *inds, int count, void *src)
+{
+    cTMap *m = resolveVar(name);
+    const Real *vals = static_cast<const Real *>(src);
+    for (int i = 0; i < count; ++i)
+        m->data.cell(static_cast<size_t>(inds[i])) = vals[i];
+}
 
 //---------------------------------------------------------------------------
 // Grid information (stubbed)

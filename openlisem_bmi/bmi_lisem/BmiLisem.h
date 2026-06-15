@@ -101,9 +101,16 @@ private:
     TWorld *model = nullptr;
 
     // Output variable registry, populated by Initialize() once maps are allocated.
-    std::vector<std::string>          _out_names;   // stable iteration order
-    std::map<std::string, cTMap*>     _out_maps;    // name -> model map pointer
-    std::map<std::string, std::string> _out_units;  // name -> BMI units string
+    std::vector<std::string>           _out_names;   // stable order
+    std::map<std::string, cTMap*>      _out_maps;
+
+    // Input variable registry (same pattern; also listed in _all_* for var-info).
+    std::vector<std::string>           _in_names;    // stable order
+    std::map<std::string, cTMap*>      _in_maps;
+
+    // Unified lookup for var-info methods (name->map, name->units).
+    std::map<std::string, cTMap*>      _all_maps;
+    std::map<std::string, std::string> _all_units;
 
     void buildVarRegistry();          // wire standard names to TWorld maps
     cTMap *resolveVar(const std::string &name) const;  // throws if unknown

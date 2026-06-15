@@ -39,6 +39,32 @@ int main(int argc, char **argv)
         std::cout << "end time  : " << m.GetEndTime()   << " " << m.GetTimeUnits() << "\n";
         std::cout << "time step : " << m.GetTimeStep()  << " " << m.GetTimeUnits() << "\n";
 
+        // --- B3 round-trip test: SetValue / GetValue BEFORE any Update ---
+        {
+            const std::string var = "land_vegetation__cover_fraction";
+            const int n = m.GetGridSize(0);
+            const Real fill = static_cast<Real>(0.42);
+
+            // write a constant field via BMI
+            std::vector<Real> src(static_cast<size_t>(n), fill);
+            m.SetValue(var, src.data());
+
+            // read it back via BMI
+            std::vector<Real> dst(static_cast<size_t>(n), static_cast<Real>(0.0));
+            m.GetValue(var, dst.data());
+
+            double sum_src = 0.0, sum_dst = 0.0;
+            bool elem_match = true;
+            for (int i = 0; i < n; ++i) {
+                sum_src += src[i];
+                sum_dst += dst[i];
+                if (src[i] != dst[i]) elem_match = false;
+            }
+            std::cout << "\n[setval] SetValue sum  = " << sum_src << "\n";
+            std::cout << "[setval] GetValue sum  = " << sum_dst << "\n";
+            std::cout << "[setval] roundtrip match: " << (elem_match ? "YES" : "NO") << "\n";
+        }
+
         while (m.GetCurrentTime() < m.GetEndTime())
             m.Update();
 
