@@ -225,3 +225,39 @@ target_link_libraries(Lisem
     OpenMP::OpenMP_CXX
 )
 
+#---------------------------------------------------------------------------
+# Native C++ BMI (bmi::Bmi) wrapper around TWorld.
+# Opt-in so the default Lisem build is unaffected:  cmake -DLISEM_BUILD_BMI=ON
+#---------------------------------------------------------------------------
+option(LISEM_BUILD_BMI "Build native C++ BMI library (bmilisem) and test driver" OFF)
+
+IF(LISEM_BUILD_BMI)
+    # Reuse the full model/UI sources, minus model/main.cpp (it defines main()).
+    SET(BMI_MODEL_SOURCES ${APP_SOURCES})
+    LIST(REMOVE_ITEM BMI_MODEL_SOURCES model/main.cpp)
+
+    # Static library: model objects + BMI wrapper (+ generated MOC/UI/RCC).
+    add_library(bmilisem STATIC
+        ${UI_SOURCES}
+        ${RCC_SOURCES}
+        ${BMI_MODEL_SOURCES}
+        ${MOC_FILES}
+        bmi_lisem/BmiLisem.cpp
+        bmi_lisem/BmiLisem.h
+        include/bmi.hxx
+    )
+    target_include_directories(bmilisem PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/bmi_lisem
+    )
+    target_link_libraries(bmilisem
+        Qt6::Widgets Qt6::Gui Qt6::Core Qt6::Network
+        ${GDAL_LIBRARIES} ${QWT_LIBRARIES} ${OSSL_LIBRARIES}
+        OpenMP::OpenMP_CXX
+    )
+
+    # Minimal driver exercising the BMI lifecycle (== ./Lisem -ni -bmistep).
+    add_executable(lisem_bmi_test bmi_lisem/lisem_bmi_test.cpp)
+    target_link_libraries(lisem_bmi_test bmilisem)
+ENDIF()
+
