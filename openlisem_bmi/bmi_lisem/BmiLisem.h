@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "bmi.hxx"
+#include "fixture.h"  // RAII GDAL driver registration (mirrors main.cpp Fixture fixture)
 
 class TWorld;  // forward declaration: keep Qt/model headers out of this header
 
@@ -90,6 +91,7 @@ public:
     void ResetEvent();
 
 private:
+    Fixture _gdal_fixture;  // FIRST member: registers GDAL drivers before any map I/O
     TWorld *model = nullptr;
 };
 
