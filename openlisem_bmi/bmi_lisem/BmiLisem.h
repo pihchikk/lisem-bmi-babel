@@ -112,8 +112,14 @@ private:
     std::map<std::string, cTMap*>      _all_maps;
     std::map<std::string, std::string> _all_units;
 
+    // Scalar output registry (grid 1, rank 0): catchment totals from TWorld.
+    std::vector<std::string>           _scalar_out_names;
+    std::map<std::string, double*>     _scalar_out_ptrs;   // points into TWorld members
+    std::map<std::string, std::string> _scalar_out_units;
+
     void buildVarRegistry();          // wire standard names to TWorld maps
     cTMap *resolveVar(const std::string &name) const;  // throws if unknown
+    bool isScalarOutput(const std::string &name) const;
     int nCells() const;               // _nrRows * _nrCols (== GetGridSize(0))
     cTMap *refMap() const;            // a guaranteed-allocated map for grid geometry
 };

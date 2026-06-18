@@ -345,6 +345,7 @@ void TWorld::ResetEvent()
     Qtot = 0;  Qtot_dt = 0;  QTile = 0;  QTiletot = 0;
     QfloodoutTot = 0;  Qfloodout = 0;  Qtotmm = 0;  Qboundtotmm = 0;
     GWdeeptot = 0;  Qpeak = 0;  QpeakTime = 0;
+    RainTot = 0;  RainTotmm = 0;  SnowTot = 0;  SnowTotmm = 0;
     WHinitVolTot = 0;
     BaseFlowInit = 0;
     if (SwitchChannelBaseflowStationary)
@@ -380,6 +381,7 @@ void TWorld::Initialize()
     Qtot = 0;  Qtot_dt = 0;  QTile = 0;  QTiletot = 0;
     QfloodoutTot = 0;  Qfloodout = 0;  Qtotmm = 0;  Qboundtotmm = 0;
     GWdeeptot = 0;  Qpeak = 0;  QpeakTime = 0;
+    RainTot = 0;  RainTotmm = 0;  SnowTot = 0;  SnowTotmm = 0;
     WHinitVolTot = 0;
     BaseFlowInit = 0;
     if (SwitchChannelBaseflowStationary)

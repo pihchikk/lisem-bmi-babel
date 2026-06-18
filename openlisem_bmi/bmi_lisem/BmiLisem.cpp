@@ -63,6 +63,7 @@ void BmiLisem::Initialize(std::string config_file)
         throw std::runtime_error("BmiLisem::Initialize: runfile not found: " + config_file);
 
     model->Initialize();   // InitializeStatic + SnapshotInitialState + scalar resets
+    model->avgTheta();     // initialise ThetaI*a so they are valid at t0
 
     buildVarRegistry();    // maps are allocated now — wire standard names to them
 }
@@ -75,23 +76,36 @@ void BmiLisem::buildVarRegistry()
     _out_names.clear(); _out_maps.clear();
     _in_names.clear();  _in_maps.clear();
     _all_maps.clear();  _all_units.clear();
+    _scalar_out_names.clear(); _scalar_out_ptrs.clear(); _scalar_out_units.clear();
 
+    // --- Raster (grid 0) variables ---
     // Each entry: name, map pointer, units string, is_input, is_output.
     struct VarDef { const char *name; cTMap *map; const char *units; bool in; bool out; };
     const VarDef defs[] = {
-        // outputs
-        { "land_surface_water__depth",       model->WH,      "m",      false, true  },
-        { "channel_water__volume_flow_rate", model->Qn,      "m3 s-1", false, true  },
-        { "soil_water__infiltration_depth",  model->Fcum,    "m",      false, true  },
-        // input + output
-        { "soil_water__volume_fraction",     model->ThetaI1, "m3 m-3", true,  true  },
-        // input-only
-        { "land_vegetation__cover_fraction", model->Cover,   "1",      true,  false },
+        // existing outputs
+        { "land_surface_water__depth",            model->WH,             "m",      false, true  },
+        { "channel_water__volume_flow_rate",      model->Qn,             "m3 s-1", false, true  },
+        { "soil_water__infiltration_depth",       model->Fcum,           "m",      false, true  },
+        // existing input + output (initial θ — does NOT change during run)
+        { "soil_water__volume_fraction",          model->ThetaI1,        "m3 m-3", true,  true  },
+        // existing input-only
+        { "land_vegetation__cover_fraction",      model->Cover,          "1",      true,  false },
+        // --- new coupling outputs ---
+        // post-event actual soil moisture per layer (updated by avgTheta() each step)
+        { "soil_water__volume_fraction_in_layer_1", model->ThetaI1a,     "m3 m-3", false, true  },
+        { "soil_water__volume_fraction_in_layer_2", model->ThetaI2a,     "m3 m-3", false, true  },
+        { "soil_water__volume_fraction_in_layer_3", model->ThetaI3a,     "m3 m-3", false, true  },
+        // soil layer bottom depths for depth-mapping
+        { "soil__layer_depth_1",                  model->SoilDepth1,     "m",      false, true  },
+        { "soil__layer_depth_2",                  model->SoilDepth2,     "m",      false, true  },
+        { "soil__layer_depth_3",                  model->SoilDepth3,     "m",      false, true  },
+        // net soil loss per unit area (TotalSoillossMap is in kg/cell; scaled in GetValue)
+        { "soil__erosion_mass_per_area",          model->TotalSoillossMap, "kg m-2", false, true },
     };
 
     for (const VarDef &d : defs) {
         if (!d.map)
-            continue;  // map inactive for this run config
+            continue;  // map inactive / layer disabled for this run config
         _all_maps[d.name]  = d.map;
         _all_units[d.name] = d.units;
         if (d.in)  { _in_names.emplace_back(d.name);  _in_maps[d.name]  = d.map; }
@@ -102,6 +116,28 @@ void BmiLisem::buildVarRegistry()
     // Kept outside the map-based registry because it has no backing cTMap.
     _in_names.emplace_back("model__reset_event");
     _all_units["model__reset_event"] = "1";
+
+    // --- Scalar (grid 1) outputs: catchment water-balance totals (all m3) ---
+    // Sources: TWorld double members updated by MassBalance() each timestep.
+    // Balance: RainTot = IntercTot + InfilTot + ETaTotVol + SoilMoistTot + Qtot
+    // (see lisTotalsMB.cpp lines 540-542 for the full MB equation)
+    struct ScalarDef { const char *name; double *ptr; const char *units; };
+    const ScalarDef sdefs[] = {
+        { "domain_rainfall__volume",           &model->RainTot,      "m3" },
+        { "domain_interception__volume",       &model->IntercTot,    "m3" },
+        { "domain_infiltration__volume",       &model->InfilTot,     "m3" },
+        { "domain_evapotranspiration__volume", &model->ETaTotVol,    "m3" },
+        { "domain_soil_water_storage__volume", &model->SoilMoistTot, "m3" },
+        // Qtot is the total outflow used to close the MB (lisTotalsMB.cpp line 371/542)
+        { "domain_runoff__volume",             &model->Qtot,         "m3" },
+    };
+    for (const ScalarDef &s : sdefs) {
+        _scalar_out_names.emplace_back(s.name);
+        _out_names.emplace_back(s.name);         // unified output list
+        _scalar_out_ptrs[s.name]  = s.ptr;
+        _scalar_out_units[s.name] = s.units;
+        _all_units[s.name]        = s.units;
+    }
 }
 
 cTMap *BmiLisem::resolveVar(const std::string &name) const
@@ -110,6 +146,11 @@ cTMap *BmiLisem::resolveVar(const std::string &name) const
     if (it == _all_maps.end())
         throw std::runtime_error("BmiLisem: unknown variable '" + name + "'");
     return it->second;
+}
+
+bool BmiLisem::isScalarOutput(const std::string &name) const
+{
+    return _scalar_out_ptrs.count(name) > 0;
 }
 
 int BmiLisem::nCells() const
@@ -132,6 +173,7 @@ void BmiLisem::Update()
     if (!model)
         throw std::runtime_error("BmiLisem::Update: not initialized");
     model->Update();
+    model->avgTheta();   // keep ThetaI*a current for BMI reads
 }
 
 void BmiLisem::UpdateUntil(double time)
@@ -188,29 +230,67 @@ std::vector<std::string> BmiLisem::GetOutputVarNames() { return _out_names; }
 static bool isScalarControl(const std::string &name) { return name == "model__reset_event"; }
 
 int BmiLisem::GetVarGrid(std::string name)
-{   if (isScalarControl(name)) return 1;  resolveVar(name); return 0; }
+{
+    if (isScalarControl(name) || isScalarOutput(name)) return 1;
+    resolveVar(name); return 0;
+}
 std::string BmiLisem::GetVarType(std::string name)
-{   if (isScalarControl(name)) return "double";  resolveVar(name); return "double"; }
+{
+    if (isScalarControl(name) || isScalarOutput(name)) return "double";
+    resolveVar(name); return "double";
+}
 std::string BmiLisem::GetVarUnits(std::string name)
-{   if (isScalarControl(name)) return "1";  resolveVar(name); return _all_units.at(name); }
+{
+    auto it = _all_units.find(name);
+    if (it != _all_units.end()) return it->second;
+    throw std::runtime_error("BmiLisem: unknown variable '" + name + "'");
+}
 int BmiLisem::GetVarItemsize(std::string name)
-{   if (isScalarControl(name)) return 8;  resolveVar(name); return static_cast<int>(sizeof(Real)); }
+{
+    if (isScalarControl(name) || isScalarOutput(name)) return static_cast<int>(sizeof(double));
+    resolveVar(name); return static_cast<int>(sizeof(Real));
+}
 int BmiLisem::GetVarNbytes(std::string name)
-{   if (isScalarControl(name)) return 8;  resolveVar(name); return nCells() * static_cast<int>(sizeof(Real)); }
+{
+    if (isScalarControl(name) || isScalarOutput(name)) return static_cast<int>(sizeof(double));
+    resolveVar(name); return nCells() * static_cast<int>(sizeof(Real));
+}
 std::string BmiLisem::GetVarLocation(std::string name)
-{   if (isScalarControl(name)) return "node";  resolveVar(name); return "node"; }
+{
+    if (isScalarControl(name) || isScalarOutput(name)) return "node";
+    resolveVar(name); return "node";
+}
 
 //---------------------------------------------------------------------------
 // Variable getters (stubbed)
 //---------------------------------------------------------------------------
 void BmiLisem::GetValue(std::string name, void *dest)
 {
+    // Scalar catchment totals (grid 1)
+    if (isScalarOutput(name)) {
+        std::memcpy(dest, _scalar_out_ptrs.at(name), sizeof(double));
+        return;
+    }
     cTMap *m = resolveVar(name);
+    // Erosion map is stored as kg/cell; expose as kg/m²
+    if (name == "soil__erosion_mass_per_area") {
+        const Real factor = static_cast<Real>(1.0 / (model->_dx * model->_dx));
+        Real *out = static_cast<Real *>(dest);
+        const int n = nCells();
+        for (int i = 0; i < n; ++i)
+            out[i] = m->data.cell(static_cast<size_t>(i)) * factor;
+        return;
+    }
     std::memcpy(dest, &m->data.cell(0), static_cast<size_t>(nCells()) * sizeof(Real));
 }
 
 void *BmiLisem::GetValuePtr(std::string name)
 {
+    // Scalar catchment totals: return pointer to the TWorld double
+    if (isScalarOutput(name))
+        return static_cast<void *>(_scalar_out_ptrs.at(name));
+    // Erosion map requires on-the-fly scaling; a raw pointer would give kg/cell.
+    // Callers that need kg/m² must use GetValue instead.
     cTMap *m = resolveVar(name);
     return &m->data.cell(0);
 }
