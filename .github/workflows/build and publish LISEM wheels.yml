@@ -69,7 +69,12 @@ jobs:
           set -e
           cd openlisem_bmi
           mkdir -p build && cd build
-          cmake .. -DCMAKE_BUILD_TYPE=Release
+          # ВАЖНО: -DCMAKE_DEPENDS_USE_COMPILER=OFF — Qt6 несёт genex
+          # $<$<NOT:$<CONFIG:Debug>>:QT_NO_DEBUG> в INTERFACE_COMPILE_DEFINITIONS,
+          # который при Unix Makefiles + компиляторном сканировании зависимостей
+          # (дефолт с CMake 3.20) протекает непроевалуированным в compiler_depend.ts.
+          # Отключение компиляторного depends-сканирования устраняет мангление.
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_DEPENDS_USE_COMPILER=OFF
           make -j$(nproc)
           ls -la Lisem libbmilisem.so libbmilisem*.a
           echo "BUILD_OK"
@@ -164,6 +169,13 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
 # ===================== ЧТО МОЖЕТ ПОТРЕБОВАТЬ ДОВОДКИ =====================
+#
+# 0) Сборка падала с "/bin/sh: cannot create -D...compiler_depend.ts...NOT:...CONFIG:Debug".
+#    Причина: Qt6 genex $<$<NOT:$<CONFIG:Debug>>:QT_NO_DEBUG> + Unix Makefiles +
+#    CMAKE_DEPENDS_USE_COMPILER=ON (дефолт CMake>=3.20). Лечится флагом
+#    -DCMAKE_DEPENDS_USE_COMPILER=OFF (уже добавлен). Альтернатива — генератор Ninja:
+#        cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release && ninja
+#    (тогда добавь ninja-build в apt-install). Ninja эвалуирует genex корректно.
 #
 # A) auditwheel и Qt6. auditwheel забандлит libQt6*, libgdal, libqwt в колесо, но:
 #    - GL-либы (libGL/libGLX/libOpenGL/libEGL) исключены — их даёт система.
