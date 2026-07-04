@@ -20,41 +20,41 @@ needs_runfile = pytest.mark.skipif(
     reason="LISEM_TEST_RUNFILE not set; no input data available",
 )
 
-# New coupling map output names
+# New coupling map output names (canonical ESoil standard names)
 MAP_OUTPUTS_COUPLING = [
-    "soil_water__volume_fraction_in_layer_1",
-    "soil_water__volume_fraction_in_layer_2",
-    "soil_water__volume_fraction_in_layer_3",
-    "soil__layer_depth_1",
-    "soil__layer_depth_2",
-    "soil__layer_depth_3",
-    "soil__erosion_mass_per_area",
+    "soil_water_actual_layer-1",
+    "soil_water_actual_layer-2",
+    "soil_water_actual_layer-3",
+    "soil_layer-depth~layer-1",
+    "soil_layer-depth~layer-2",
+    "soil_layer-depth~layer-3",
+    "soil_erosion~mass-per-area",
 ]
 
-# New scalar output names
+# New scalar output names (canonical ESoil standard names)
 SCALAR_OUTPUTS = [
-    "domain_rainfall__volume",
-    "domain_interception__volume",
-    "domain_infiltration__volume",
-    "domain_evapotranspiration__volume",
-    "domain_soil_water_storage__volume",
-    "domain_runoff__volume",
+    "surface-water~rainfall_volume",
+    "surface-water~interception_volume",
+    "surface-water~infiltration_volume",
+    "surface-water~evapotranspiration_volume",
+    "surface-water~storage_volume",
+    "surface-water~runoff_volume",
 ]
 
 EXPECTED_UNITS = {
-    "soil_water__volume_fraction_in_layer_1": "m3 m-3",
-    "soil_water__volume_fraction_in_layer_2": "m3 m-3",
-    "soil_water__volume_fraction_in_layer_3": "m3 m-3",
-    "soil__layer_depth_1": "m",
-    "soil__layer_depth_2": "m",
-    "soil__layer_depth_3": "m",
-    "soil__erosion_mass_per_area": "kg m-2",
-    "domain_rainfall__volume": "m3",
-    "domain_interception__volume": "m3",
-    "domain_infiltration__volume": "m3",
-    "domain_evapotranspiration__volume": "m3",
-    "domain_soil_water_storage__volume": "m3",
-    "domain_runoff__volume": "m3",
+    "soil_water_actual_layer-1": "m3 m-3",
+    "soil_water_actual_layer-2": "m3 m-3",
+    "soil_water_actual_layer-3": "m3 m-3",
+    "soil_layer-depth~layer-1": "m",
+    "soil_layer-depth~layer-2": "m",
+    "soil_layer-depth~layer-3": "m",
+    "soil_erosion~mass-per-area": "kg m-2",
+    "surface-water~rainfall_volume": "m3",
+    "surface-water~interception_volume": "m3",
+    "surface-water~infiltration_volume": "m3",
+    "surface-water~evapotranspiration_volume": "m3",
+    "surface-water~storage_volume": "m3",
+    "surface-water~runoff_volume": "m3",
 }
 
 
@@ -156,14 +156,14 @@ class TestPostEventValues:
         m = _make_model()
         try:
             out_vars = set(m.get_output_var_names())
-            if "soil_water__volume_fraction_in_layer_1" not in out_vars:
-                pytest.skip("soil_water__volume_fraction_in_layer_1 not registered")
+            if "soil_water_actual_layer-1" not in out_vars:
+                pytest.skip("soil_water_actual_layer-1 not registered")
 
-            theta0_flat = m.get_value_ref("soil_water__volume_fraction").copy()
+            theta0_flat = m.get_value_ref("soil_water_actual").copy()
 
             _run_to_end(m)
 
-            theta1_flat = m.get_value_ref("soil_water__volume_fraction_in_layer_1").copy()
+            theta1_flat = m.get_value_ref("soil_water_actual_layer-1").copy()
 
             # Must be finite and within [0, 1]
             assert np.all(np.isfinite(theta1_flat)), "post-event θ1a contains non-finite values"
@@ -184,12 +184,12 @@ class TestPostEventValues:
         m = _make_model()
         try:
             out_vars = set(m.get_output_var_names())
-            if "soil__erosion_mass_per_area" not in out_vars:
-                pytest.skip("soil__erosion_mass_per_area not registered (erosion off?)")
+            if "soil_erosion~mass-per-area" not in out_vars:
+                pytest.skip("soil_erosion~mass-per-area not registered (erosion off?)")
 
             _run_to_end(m)
 
-            erosion_flat = m.get_value_ref("soil__erosion_mass_per_area").copy()
+            erosion_flat = m.get_value_ref("soil_erosion~mass-per-area").copy()
             valid = erosion_flat[np.isfinite(erosion_flat)]
             assert len(valid) > 0, "all erosion values are NaN/inf"
             assert np.all(valid >= 0), "erosion map contains negative kg/m² values"
@@ -202,17 +202,17 @@ class TestPostEventValues:
         m = _make_model()
         try:
             out_vars = set(m.get_output_var_names())
-            if "soil__layer_depth_1" not in out_vars:
-                pytest.skip("soil__layer_depth_1 not registered")
+            if "soil_layer-depth~layer-1" not in out_vars:
+                pytest.skip("soil_layer-depth~layer-1 not registered")
 
-            depth0 = m.get_value_ref("soil__layer_depth_1").copy()
-            assert np.all(depth0[np.isfinite(depth0)] > 0), "soil__layer_depth_1 has non-positive values"
+            depth0 = m.get_value_ref("soil_layer-depth~layer-1").copy()
+            assert np.all(depth0[np.isfinite(depth0)] > 0), "soil_layer-depth~layer-1 has non-positive values"
 
             _run_to_end(m)
 
-            depth1 = m.get_value_ref("soil__layer_depth_1").copy()
+            depth1 = m.get_value_ref("soil_layer-depth~layer-1").copy()
             np.testing.assert_array_equal(depth0, depth1,
-                                          err_msg="soil__layer_depth_1 changed during the run")
+                                          err_msg="soil_layer-depth~layer-1 changed during the run")
         finally:
             m.finalize()
 
@@ -245,12 +245,12 @@ class TestWaterBalance:
                 m.get_value(name, arr)
                 return float(arr[0])
 
-            rain   = scalar("domain_rainfall__volume")
-            interc = scalar("domain_interception__volume")
-            infil  = scalar("domain_infiltration__volume")
-            et     = scalar("domain_evapotranspiration__volume")
-            dstorage = scalar("domain_soil_water_storage__volume")
-            runoff = scalar("domain_runoff__volume")
+            rain   = scalar("surface-water~rainfall_volume")
+            interc = scalar("surface-water~interception_volume")
+            infil  = scalar("surface-water~infiltration_volume")
+            et     = scalar("surface-water~evapotranspiration_volume")
+            dstorage = scalar("surface-water~storage_volume")
+            runoff = scalar("surface-water~runoff_volume")
 
             residual = rain - (interc + infil + et + dstorage + runoff)
             rel_err  = abs(residual) / max(abs(rain), 1e-12)

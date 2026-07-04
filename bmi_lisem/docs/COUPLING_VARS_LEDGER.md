@@ -3,6 +3,13 @@
 Variables added to the C++ BMI registry (`BmiLisem::buildVarRegistry()`) for
 physical coupling with AquaCrop and other soil-water models.
 
+> **Naming update:** the registry now stores the **canonical ESoil standard
+> names** (the "Standard project name" column below). Legacy CSDMS names
+> (`object__quantity`) are still accepted on every name-keyed BMI call via
+> `BmiLisem::resolveVarAlias()`, but `GetOutputVarNames()`/`GetInputVarNames()`
+> advertise only the canonical names. The full old→new table lives in
+> `docs/STANDARD_NAMES_ALIASES.md`.
+
 ## Raster outputs (grid 0, uniform_rectilinear)
 
 | C++ BMI name | Source (`TWorld` member) | Units | Grid | Standard project name (Python wrapper target) |

@@ -118,6 +118,10 @@ private:
     std::map<std::string, std::string> _scalar_out_units;
 
     void buildVarRegistry();          // wire standard names to TWorld maps
+    // Alias resolver: maps legacy CSDMS names to canonical ESoil standard
+    // names; canonical (and unknown) names pass through unchanged. Called at
+    // the top of every name-keyed method so both spellings resolve identically.
+    static std::string resolveVarAlias(const std::string &name);
     cTMap *resolveVar(const std::string &name) const;  // throws if unknown
     bool isScalarOutput(const std::string &name) const;
     int nCells() const;               // _nrRows * _nrCols (== GetGridSize(0))
