@@ -64,17 +64,25 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
+      - name: Patch CMakeLists — убрать Qt5-эра строки с утечкой genex
+        run: |
+          set -e
+          CML=openlisem_bmi/CMakeLists.txt
+          cp "$CML" "$CML.bak"
+          # add_definitions(${Qt6*_DEFINITIONS}) и CMAKE_CXX_FLAGS += ${Qt6*_EXECUTABLE_COMPILE_FLAGS}
+          # тянут в флаги сырой genex $<$<NOT:$<CONFIG:Debug>>:QT_NO_DEBUG>, который
+          # make/sh ломает ($< = автопеременная). В Qt6 всё даёт target_link_libraries(Qt6::...).
+          sed -i -E '/add_definitions\(\$\{Qt6[A-Za-z]+_DEFINITIONS\}\)/d' "$CML"
+          sed -i -E '/Qt6[A-Za-z]+_EXECUTABLE_COMPILE_FLAGS/d' "$CML"
+          echo "=== diff ==="; diff "$CML.bak" "$CML" || true
+
       - name: Build native libbmilisem.so  (cmake .. && make — как в ноутбуке)
         run: |
           set -e
           cd openlisem_bmi
           mkdir -p build && cd build
-          # ВАЖНО: -DCMAKE_DEPENDS_USE_COMPILER=OFF — Qt6 несёт genex
-          # $<$<NOT:$<CONFIG:Debug>>:QT_NO_DEBUG> в INTERFACE_COMPILE_DEFINITIONS,
-          # который при Unix Makefiles + компиляторном сканировании зависимостей
-          # (дефолт с CMake 3.20) протекает непроевалуированным в compiler_depend.ts.
-          # Отключение компиляторного depends-сканирования устраняет мангление.
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_DEPENDS_USE_COMPILER=OFF
+          # genex-утечку убрали патчем CMakeLists выше (Qt5-эра add_definitions/CXX_FLAGS).
+          cmake .. -DCMAKE_BUILD_TYPE=Release
           make -j$(nproc)
           ls -la Lisem libbmilisem.so libbmilisem*.a
           echo "BUILD_OK"
