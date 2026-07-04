@@ -1,0 +1,188 @@
+# .github/workflows/build-wheels.yml  для lisem-bmi-babel
+# Основано на ФАКТИЧЕСКОМ рабочем рецепте из ноутбука (Ubuntu + Qt6 из apt +
+# QWT-форк из истории репо). Собираем на ubuntu-22.04 (Qt6 ставится тривиально),
+# затем auditwheel repair -> manylinux_2_35 (PyPI принимает).
+#
+# ⚠️ Не прогонялось в CI. Главный риск — auditwheel + Qt6/OpenGL (GL-либы исключаем).
+#    Если колесо с полным Qt6 окажется неподъёмным — см. HEADLESS в конце файла.
+
+name: Build LISEM wheels
+
+on:
+  push:
+    tags: ['v*']
+    branches: ['pypi-version']
+  workflow_dispatch:
+
+env:
+  QWT_PREFIX: /usr/local/qwt-6.4.0-ma
+  # Коммит/путь QWT-форка в истории репо (из ноутбука: git checkout f28086d~1 -- qwt-multiaxes-qt6)
+  QWT_TREEISH: "f28086d~1"
+  QWT_SUBDIR: "qwt-multiaxes-qt6"
+
+jobs:
+  build_linux:
+    name: Linux wheel (Python ${{ matrix.python }})
+    runs-on: ubuntu-22.04            # glibc 2.35 -> manylinux_2_35 после auditwheel
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0             # нужна ПОЛНАЯ история — QWT-форк лежит в старом коммите
+          submodules: recursive
+
+      - name: System deps (Qt6, GDAL, toolchain) — как в ноутбуке
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            qt6-base-dev qt6-base-dev-tools libqt6opengl6-dev \
+            libgdal-dev gdal-bin \
+            gfortran cmake pkg-config make git python3-dev patchelf \
+            libgl1-mesa-dev
+          gdalinfo --version
+          qmake6 --version
+
+      - name: Build QWT fork (из истории репо, БЕЗ внешнего URL)
+        run: |
+          set -e
+          git config --global --add safe.directory "$PWD"
+          # достаём каталог форка из старого коммита прямо в рабочее дерево
+          git checkout ${QWT_TREEISH} -- ${QWT_SUBDIR}
+          cd ${QWT_SUBDIR}
+          qmake6 qwt.pro
+          make -j$(nproc)
+          sudo make install
+          ls -la ${QWT_PREFIX}/lib/libqwt.so*
+          # вернуть рабочее дерево к HEAD (каталог форка был выгружен временно)
+          cd .. && git checkout HEAD -- ${QWT_SUBDIR} 2>/dev/null || true
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Build native libbmilisem.so  (cmake .. && make — как в ноутбуке)
+        run: |
+          set -e
+          cd openlisem_bmi
+          mkdir -p build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+          ls -la Lisem libbmilisem.so libbmilisem*.a
+          echo "BUILD_OK"
+
+      - name: pkg-config .pc для bmilisem (как cell 20 ноутбука)
+        run: |
+          set -e
+          sudo mkdir -p /usr/local/lib/pkgconfig
+          PREFIX="$PWD/openlisem_bmi"
+          sudo tee /usr/local/lib/pkgconfig/bmilisem.pc >/dev/null << EOF
+          prefix=${PREFIX}
+          libdir=\${prefix}/build
+          includedir=\${prefix}/include
+
+          Name: bmilisem
+          Description: Native BMI for OpenLISEM
+          Version: 0.1
+          Cflags: -I\${includedir} -I\${prefix}/bmi_lisem
+          Libs: -L\${libdir} -lbmilisem -L${QWT_PREFIX}/lib -lqwt -lgdal -lQt6Core -lQt6Gui -lQt6Widgets -lQt6Network -lgomp -lGLX -lOpenGL -lpthread
+          EOF
+          echo "bmilisem.pc создан"
+
+      - name: Build babelized wheel
+        env:
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
+          LD_LIBRARY_PATH: /usr/local/lib:${{ env.QWT_PREFIX }}/lib
+          LIBRARY_PATH: /usr/local/lib:${{ env.QWT_PREFIX }}/lib
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          python -m pip install build meson-python meson ninja cython numpy wheel auditwheel patchelf
+          # babelize-проект (pyproject с name=bmi_lisem)
+          PROJ=$(grep -rl 'name *= *"bmi_lisem"' --include=pyproject.toml . | head -1 | xargs dirname)
+          echo "bmi_lisem project: $PROJ"
+          cd "$PROJ"
+          python -m build --wheel --no-isolation
+          ls -la dist/
+          echo "PROJ=$PROJ" >> $GITHUB_ENV
+
+      - name: Repair wheel -> manylinux (bundle Qt6/GDAL/QWT, GL исключаем)
+        env:
+          LD_LIBRARY_PATH: /usr/local/lib:${{ env.QWT_PREFIX }}/lib:${{ github.workspace }}/openlisem_bmi/build
+        run: |
+          set -e
+          cd "$PROJ"
+          auditwheel show dist/*.whl || true
+          # GL-либы даёт целевая система -> исключаем по политике manylinux
+          auditwheel repair dist/*.whl --wheel-dir dist-fixed/ \
+            --exclude libGL.so.1 --exclude libGLX.so.0 \
+            --exclude libOpenGL.so.0 --exclude libEGL.so.1 \
+            || { echo "auditwheel упал (ожидаемо на Qt6/GL) — смотри какие .so не нашлись, добавь путь в LD_LIBRARY_PATH или --exclude"; exit 1; }
+          rm -f dist/*.whl && cp dist-fixed/*.whl dist/
+          ls -la dist/
+
+      - name: Test wheel
+        run: |
+          python -m pip install "$PROJ"/dist/*.whl
+          cd /tmp
+          python -c "import bmi_lisem; from bmi_lisem import Lisem; print('OK import:', bmi_lisem.__file__)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-linux-py${{ matrix.python }}
+          path: ${{ env.PROJ }}/dist/*.whl
+
+  publish_test:
+    name: Publish to TestPyPI
+    needs: [build_linux]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist/, pattern: wheel-*, merge-multiple: true }
+      - run: ls -la dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.TESTPYPI_TOKEN }}
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+  publish:
+    name: Publish to PyPI
+    needs: [build_linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions: { id-token: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist/, pattern: wheel-*, merge-multiple: true }
+      - run: ls -la dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+# ===================== ЧТО МОЖЕТ ПОТРЕБОВАТЬ ДОВОДКИ =====================
+#
+# A) auditwheel и Qt6. auditwheel забандлит libQt6*, libgdal, libqwt в колесо, но:
+#    - GL-либы (libGL/libGLX/libOpenGL/libEGL) исключены — их даёт система.
+#      На headless-сервере их может не быть -> импорт колеса упадёт на link Qt6Gui.
+#      Тогда либо ставить mesa на целевой машине, либо идти в HEADLESS (ниже).
+#    - Абсолютные пути в babel.toml (library_dirs/include_dirs = /home/jovyan/work/...)
+#      в CI не существуют. Проверь, что build берёт .pc/-L из окружения, а не их.
+#      Если сборка не находит libbmilisem — поправь babel.toml на относительные пути.
+#
+# B) HEADLESS (если полное Qt6-колесо не поедет). Убрать GUI из линковки:
+#    - в openlisem_bmi/CMakeLists.txt добавить option(BMI_HEADLESS ...) и под ней
+#      не тянуть Qt6 Widgets/Gui/QWT/OpenGL для таргета libbmilisem;
+#    - в babel.toml: libraries = ["bmilisem","gdal","Qt6Core","gomp","pthread"];
+#    - в bmilisem.pc убрать -lQt6Gui -lQt6Widgets -lqwt -lGLX -lOpenGL.
+#    Тогда единственная тяжёлая зависимость — GDAL, и колесо собирается чисто.
+#
+# C) Windows — добавить job по образцу AquaCrop (MSYS2 + pacman mingw-w64-x86_64-qt6
+#    + gdal + собранный qwt-форк + delvewheel), когда Linux-колесо станет зелёным.
+#
+# D) manylinux-тег. ubuntu-22.04 -> auditwheel даст manylinux_2_35 (pip>=20.3 ставит).
+#    Если нужен более старый тег для совместимости — собирать в manylinux_2_28 (EL8),
+#    но там Qt6 из коробки нет (нужен GCC10+), путь заметно сложнее.
