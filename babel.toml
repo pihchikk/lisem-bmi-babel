@@ -1,0 +1,64 @@
+language = "c++"
+
+[library.Lisem]
+language = "c++"
+library = "bmilisem"
+header = "BmiLisem.h"
+entry_point = "BmiLisem"
+
+[components.Lisem]
+language = "c++"
+library = "bmilisem"
+header = "BmiLisem.h"
+entry_point = "BmiLisem"
+
+[build]
+undef_macros = []
+define_macros = []
+libraries = [
+    "bmilisem",
+    "gdal",
+    "Qt6Core",
+    "Qt6Gui",
+    "Qt6Widgets",
+    "Qt6Network",
+    "qwt",
+    "gomp",
+    "GLX",
+    "OpenGL",
+    "pthread",
+]
+library_dirs = [
+    "/home/jovyan/work/lisem-bmi-babel/openlisem_bmi/build",
+    "/usr/local/qwt-6.4.0-ma/lib",
+    "/usr/lib/x86_64-linux-gnu",
+    "/usr/lib/gcc/x86_64-linux-gnu/13",
+]
+include_dirs = [
+    "/home/jovyan/work/lisem-bmi-babel/openlisem_bmi/include",
+    "/home/jovyan/work/lisem-bmi-babel/openlisem_bmi/bmi_lisem",
+]
+extra_compile_args = [
+    "-std=c++17",
+]
+
+[package]
+name = "bmi_lisem"
+requirements = []
+
+[info]
+github_username = "pihchikk"
+package_author = "pihchikk"
+package_author_email = "pihchikk@users.noreply.github.com"
+package_license = "MIT License"
+summary = "Native in-process BMI for OpenLISEM"
+
+[ci]
+python_version = [
+    "3.10",
+    "3.11",
+    "3.12",
+]
+os = [
+    "linux",
+]

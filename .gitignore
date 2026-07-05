@@ -1,28 +1,12 @@
-# build artifacts
+qwt-multiaxes-qt6/
+**/.ipynb_checkpoints/
+.ipynb_checkpoints/
 build/
-*-bin/
-lisem-bin/
+dist/
 *.egg-info/
 __pycache__/
-*.pyc
 *.so
+*.so.*
 *.o
-*.obj
-CMakeFiles/
-CMakeCache.txt
-# data / runs / outputs (не коммитим)
-inputfiles/
-results/
-runfiles/
-*.run
-*.run.bak
-*.map
-*.res
-*.csv
-# editor / OS
-.vscode/
-.idea/
-.DS_Store
-# docs build
-doxygen/
-docs/_build/
+*.prl
+bmi_lisem/data
