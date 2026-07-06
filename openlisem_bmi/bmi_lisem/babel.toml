@@ -13,8 +13,8 @@ entry_point = "BmiLisem"
 undef_macros = []
 define_macros = []
 libraries = ["bmilisem", "gdal", "Qt6Core", "Qt6Gui", "Qt6Widgets", "Qt6Network", "qwt", "gomp", "GLX", "OpenGL", "pthread"]
-library_dirs = ["/home/jovyan/work/lisem-bmi-babel/openlisem_bmi/build", "/usr/local/qwt-6.4.0-ma/lib", "/usr/lib/x86_64-linux-gnu", "/usr/lib/gcc/x86_64-linux-gnu/13"]
-include_dirs = ["/home/jovyan/work/lisem-bmi-babel/openlisem_bmi/include", "/home/jovyan/work/lisem-bmi-babel/openlisem_bmi/bmi_lisem"]
+library_dirs = ["openlisem_bmi/build", "/usr/local/qwt-6.4.0-ma/lib", "/usr/lib/x86_64-linux-gnu", "/usr/lib/gcc/x86_64-linux-gnu"]
+include_dirs = ["openlisem_bmi/include", "openlisem_bmi/bmi_lisem"]
 extra_compile_args = ["-std=c++17"]
 
 [package]
