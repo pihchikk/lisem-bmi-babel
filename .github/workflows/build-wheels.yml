@@ -114,10 +114,11 @@ jobs:
           set -e
           python -m pip install --upgrade pip
           python -m pip install build meson-python meson ninja cython numpy wheel auditwheel patchelf
-          # babelize-проект (pyproject с name=bmi_lisem)
-          PROJ=$(grep -rl 'name *= *"bmi_lisem"' --include=pyproject.toml . | head -1 | xargs dirname)
-          echo "bmi_lisem project: $PROJ"
-          cd "$PROJ"
+          # babelized-пакет закоммичен в КОРЕНЬ репо (name=bmi_lisem в ./pyproject.toml)
+          grep -qE 'name *= *["'"'"']?bmi_lisem' pyproject.toml \
+            || { echo "!!! ./pyproject.toml не bmi_lisem — проверь структуру репо"; exit 1; }
+          PROJ=.
+          echo "bmi_lisem project: repo root"
           python -m build --wheel --no-isolation
           ls -la dist/
           echo "PROJ=$PROJ" >> $GITHUB_ENV
@@ -127,7 +128,7 @@ jobs:
           LD_LIBRARY_PATH: /usr/local/lib:${{ env.QWT_PREFIX }}/lib:${{ github.workspace }}/openlisem_bmi/build
         run: |
           set -e
-          cd "$PROJ"
+          cd "$PROJ"   # repo root
           auditwheel show dist/*.whl || true
           # GL-либы даёт целевая система -> исключаем по политике manylinux
           auditwheel repair dist/*.whl --wheel-dir dist-fixed/ \
