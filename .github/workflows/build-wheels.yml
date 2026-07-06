@@ -155,16 +155,18 @@ jobs:
     needs: [build_linux]
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
+    permissions:
+      id-token: write          # обязательно для OIDC
     steps:
       - uses: actions/download-artifact@v4
         with: { path: dist/, pattern: wheel-*, merge-multiple: true }
       - run: ls -la dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ secrets.TESTPYPI_TOKEN }}
           repository-url: https://test.pypi.org/legacy/
           skip-existing: true
-
+          # ← БЕЗ password: строку с secrets.TESTPYPI_TOKEN УБРАТЬ
+  
   publish:
     name: Publish to PyPI
     needs: [build_linux]
