@@ -6,37 +6,30 @@ bmi_lisem
         :target: https://bmi.readthedocs.io/
         :alt: Basic Model Interface
 
-.. image:: https://img.shields.io/badge/recipe-bmi_lisem-green.svg
-        :target: https://anaconda.org/conda-forge/bmi_lisem
+.. image:: https://img.shields.io/badge/standard%20names-ESoil%20%2F%20ЕСОМОД-blue.svg
+        :alt: ESoil standard names
 
-.. image:: https://readthedocs.org/projects/bmi-lisem/badge/?version=latest
-        :target: https://bmi-lisem.readthedocs.io/en/latest/?badge=latest
-        :alt: Documentation Status
+BMI 2.0 обёртка для **OpenLISEM** (2D модель поверхностного стока и эрозии),
+сгенерированная `babelizer <https://babelizer.readthedocs.io>`_ поверх нативной
+C++ реализации ``BmiLisem`` (``libbmilisem.so``). Пакет позволяет управлять
+OpenLISEM из Python и связывать его с другими моделями (например, AquaCrop)
+через PyMT по стандартным именам переменных.
 
-.. image:: https://github.com/pihchikk/bmi_lisem/actions/workflows/test.yml/badge.svg
-        :target: https://github.com/pihchikk/bmi_lisem/actions/workflows/test.yml
-
-.. image:: https://github.com/pihchikk/bmi_lisem/actions/workflows/flake8.yml/badge.svg
-        :target: https://github.com/pihchikk/bmi_lisem/actions/workflows/flake8.yml
-
-.. image:: https://github.com/pihchikk/bmi_lisem/actions/workflows/black.yml/badge.svg
-        :target: https://github.com/pihchikk/bmi_lisem/actions/workflows/black.yml
-
+Часть системы **Цифровой двойник почвы (ЦДП)**: LISEM даёт поверхность,
+инфильтрацию и эрозию по клеткам; связанная модель AquaCrop разносит воду по
+глубине профиля. Репозиторий устроен единообразно с ``aquacrop-bmi``:
+корень репозитория — это сам babelize-проект, нативный код — в подкаталоге
+``openlisem_bmi/``.
 
 .. start-intro
-
-This project provides a wrapped version (using the `babelizer <https://babelizer.readthedocs.io>`_ tool)
-of components within the following following libraries that expose a Basic Model Interface.
-This allows these components to be imported and used within
-Python and the Python Modeling Toolkit, PyMT.
 
 .. list-table::
   :header-rows: 1
   :width: 90%
   :widths: auto
 
-  * - Library
-    - Component
+  * - Библиотека
+    - Компонент
     - PyMT
   * - bmilisem
     - :class:`~bmi_lisem.Lisem`
@@ -47,127 +40,206 @@ Python and the Python Modeling Toolkit, PyMT.
 
 .. end-intro
 
+* Лицензия: MIT
+* Исходники: https://github.com/pihchikk/lisem-bmi-babel
+* Стандартные имена: конвенция ЕСОМОД (``object_property~qualifier``); старые
+  CSDMS-имена (``object__property``) принимаются как алиасы (см. раздел
+  «Стандартные имена»).
 
-* Free software: MIT License
-* Documentation: https://bmi-lisem.readthedocs.io.
+
+Стандартные имена переменных
+============================
+
+.. start-standard-names
+
+``get_output_var_names()`` / ``get_input_var_names()`` возвращают **только
+канонические ESoil-имена**. На вход (``get_value``/``set_value``/``get_var_units``
+и т.д.) принимаются **и** новые ESoil-имена, **и** старые CSDMS — их разрешает
+alias-слой ``resolveVarAlias`` в нативном C++ (``openlisem_bmi/bmi_lisem/BmiLisem.cpp``).
+Так что переименование имён не требует регенерации Python-обёртки: имена живут
+в скомпилированной ``libbmilisem.so``.
+
+Примеры соответствий (полная таблица — в ``bmi_lisem/docs/STANDARD_NAMES_ALIASES.md``):
+
+.. list-table::
+  :header-rows: 1
+  :widths: auto
+
+  * - CSDMS (алиас, принимается)
+    - ЕСОМОД (каноническое, выдаётся)
+  * - ``soil_water__volume_fraction``
+    - ``soil_water_actual``
+  * - ``land_vegetation__cover_fraction``
+    - ``plant_cover~projective``
+  * - ``soil_water__volume_fraction_in_layer_1..3``
+    - ``soil_water_actual_layer-1..-3``
+  * - ``land_surface_water__depth``
+    - ``surface-water~depth``
+  * - ``soil_water__infiltration_depth``
+    - ``soil_infiltration~amount``
+  * - ``soil__erosion_mass_per_area``
+    - ``soil_erosion~mass-per-area``
+
+Коуплинг-критичные имена (``soil_water_actual``, ``plant_cover~projective``,
+``soil_water_actual_layer-N``) совпадают с ``aquacrop-bmi`` — это обеспечивает
+автоматическую связку через PyMT-медиатор.
+
+.. end-standard-names
 
 
-Quickstart
-==========
+Нативные зависимости
+====================
+
+.. start-native-deps
+
+В отличие от типового babelizer-пакета, OpenLISEM тянет тяжёлые нативные
+библиотеки. Для сборки из исходников и для запуска нужны:
+
+* **Qt6** (Core, Gui, Widgets, Network)
+* **GDAL**
+* **QWT** — кастомный форк ``qwt-multiaxes-qt6`` (лежит в истории репозитория)
+* **OpenMP**, **GL** (libGL/libGLX/libOpenGL) — GL-либы предоставляет система
+
+Установка системных зависимостей (Ubuntu 22.04/24.04):
+
+.. code:: bash
+
+  sudo apt-get update
+  sudo apt-get install -y qt6-base-dev qt6-base-dev-tools libqt6opengl6-dev \
+      libgdal-dev gdal-bin gfortran cmake pkg-config make git python3-dev patchelf
+
+**При установке из готового wheel** (PyPI/TestPyPI) большинство ``.so`` уже
+забандлены ``auditwheel``, но GL-либы исключены по политике manylinux — их надо
+доставить в систему:
+
+.. code:: bash
+
+  sudo apt-get install -y libopengl0 libglx0 libgl1 libegl1
+
+.. end-native-deps
+
+
+Установка
+=========
 
 .. start-quickstart
 
-To get started you will need to install the *bmi_lisem* package.
-Here are two ways to do so.
-
-Install from conda-forge
-------------------------
-
-If the *bmi_lisem* package is distributed on *conda-forge*, install it into your current environment with *conda*.
+Из wheel (быстро)
+-----------------
 
 .. code:: bash
 
-  conda install -c conda-forge bmi_lisem
+  pip install bmi_lisem
+  # если ставишь из TestPyPI:
+  # pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bmi_lisem
 
-Install from source
--------------------
-
-You can build and install the *bmi_lisem* package from source using *conda* and *pip*.
-
-First, from the source directory, install package dependencies into your current environment with *conda*.
+Затем доставь GL-либы (см. «Нативные зависимости») и проверь импорт **из другого
+каталога**, чтобы исходная папка не затеняла установленное колесо:
 
 .. code:: bash
 
-  conda install -c conda-forge --file requirements.txt --file requirements-build.txt --file requirements-library.txt
+  cd /tmp
+  python -c "import bmi_lisem; from bmi_lisem import Lisem; print('OK:', bmi_lisem.__file__)"
 
-Then install the package itself with *pip*.
+Из исходников
+-------------
+
+Сначала собери нативную ``libbmilisem.so`` и создай для неё pkg-config файл
+``bmilisem.pc`` (meson находит либу через pkg-config):
 
 .. code:: bash
 
-  pip install --no-build-isolation --editable .
+  # 1) собрать QWT-форк из истории репо
+  git checkout <qwt_commit>~1 -- qwt-multiaxes-qt6
+  ( cd qwt-multiaxes-qt6 && qmake6 qwt.pro && make -j4 && sudo make install )
 
-Note that for an editable install, the ``--no-build-isolation`` flag must be set.
+  # 2) собрать нативный LISEM (важен флаг против утечки Qt6 genex)
+  cmake -S openlisem_bmi -B openlisem_bmi/build \
+        -DCMAKE_BUILD_TYPE=Release -DCMAKE_DEPENDS_USE_COMPILER=OFF
+  make -C openlisem_bmi/build -j4        # -> libbmilisem.so
+
+  # 3) создать bmilisem.pc и положить на PKG_CONFIG_PATH (Cflags -I на openlisem_bmi/bmi_lisem)
+
+  # 4) поставить пакет NON-editable (editable-loader ребилдит на импорте и падает)
+  export PKG_CONFIG_PATH=/path/to/pkgconfig:$PKG_CONFIG_PATH
+  pip install . --no-build-isolation
+
+.. warning::
+
+  **Не используй** ``pip install --editable .`` для этого пакета: meson-python
+  editable-loader пересобирает расширение при импорте и падает в подпроцессах.
+  Ставь non-editable и проверяй импорт из ``/tmp``.
 
 .. end-quickstart
 
-Usage
-=====
+
+Использование
+=============
 
 .. start-usage
 
-There are two ways to use the components provided by this package: directly through its Basic
-Model Interface (BMI), or as a PyMT plugin.
-
-A BMI is provided by each component in this package::class:`~bmi_lisem.Lisem`
-.
-
+Компоненты доступны напрямую через BMI (:class:`~bmi_lisem.Lisem`) или как
+PyMT-плагин.
 
 .. code-block:: pycon
 
   >>> from bmi_lisem import Lisem
   >>> model = Lisem()
-  >>> model.get_component_name()  # Get the name of the component
-  >>> model.get_output_var_names()  # Get a list of the component's output variables
+  >>> model.initialize("VNIIMZ_20m/maps/probnik_20m.run")
+  >>> model.get_output_var_names()   # канонические ESoil-имена
+  >>> import numpy as np
+  >>> n = model.get_grid_size(model.get_var_grid("soil_water_actual"))
+  >>> buf = np.empty(n); model.get_value("soil_water_actual", buf)
+  >>> model.finalize()
 
-The PyMT provides a more Pythonic and convenient way to use the component,
+Через PyMT:
 
 .. code-block:: pycon
 
   >>> from pymt.models import Lisem
   >>> model = Lisem()
-  >>> model.component_name
   >>> model.output_var_names
 
+Входные данные
+--------------
 
+Пакет содержит только код обёртки — **данных в нём нет**. Для реального прогона
+нужен LISEM runfile (``*.run``) и все карты (``*.map``), на которые он ссылается,
+плюс ``rain.txt``.
 
+.. warning::
+
+  Пути в runfile (``Map Directory=``, ``Rainfall Directory=``, ``Result Directory=``)
+  часто **абсолютные** и указывают на машину, где датасет готовили. На другой
+  машине их нужно переписать под фактическое расположение, иначе ``initialize``
+  упадёт с «map/rain not found». Простейший способ — переписать три пути на
+  абсолютные от каталога с runfile перед вызовом ``initialize``.
 
 .. note::
 
-  If you will be using this project's components through the PyMT, you will first need to install
-  PyMT. This can be done using either *mamba* or *conda*.
-
-  .. tab:: mamba
-
-    .. code-block:: bash
-
-      mamba install pymt -c conda-forge
-
-  .. tab:: conda
-
-      .. code-block:: bash
-
-        conda install pymt -c conda-forge
-
+  Для использования через PyMT сначала установи PyMT:
+  ``mamba install pymt -c conda-forge`` или ``conda install pymt -c conda-forge``.
 
 .. end-usage
 
 
-Updating
-========
+Обновление (регенерация babelizer)
+==================================
 
 .. start-updating
 
-This project has been automatically generated using the `babelizer <https://babelizer.readthedocs.io>`_ tool.
-If you have made changes to the project's ``babel.toml`` file or the would like to rerender the project
-with a newer version of the *babelizer*, you can do this either directly with the *babelize* command
-or using *nox*.
+Python-обёртка сгенерирована `babelizer <https://babelizer.readthedocs.io>`_.
+Регенерация нужна **только** если меняется C-ABI нативного BMI (набор/сигнатуры
+BMI-методов). Изменения стандартных имён/алиасов/coupling-переменных живут в
+C++ и **не требуют** регенерации — достаточно пересобрать ``libbmilisem.so``.
 
 .. warning::
 
-  Many of the files in the project are auto-generated by the *babelizer* and so any changes that you've
-  made to them will likely be lost after running the following commands.
+  Многие файлы автогенерированы babelizer'ом; ручные правки в них будут потеряны
+  после ре-рендера.
 
-.. tab:: nox
+.. code:: bash
 
-  .. code:: bash
-
-    nox -s update
-
-.. tab:: babelizer
-
-  .. code:: bash
-
-    babelize update
-
+  babelize update    # или: nox -s update
 
 .. end-updating
