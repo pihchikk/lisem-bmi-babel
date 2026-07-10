@@ -129,9 +129,7 @@ alias-слой ``resolveVarAlias`` в нативном C++ (``openlisem_bmi/bmi_
 
 .. code:: bash
 
-  pip install bmi_lisem
-  # если ставишь из TestPyPI:
-  # pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bmi_lisem
+  pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ bmi_lisem
 
 Затем доставь GL-либы (см. «Нативные зависимости») и проверь импорт **из другого
 каталога**, чтобы исходная папка не затеняла установленное колесо:
