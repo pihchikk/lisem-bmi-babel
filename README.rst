@@ -106,7 +106,8 @@ alias-слой ``resolveVarAlias`` в нативном C++ (``openlisem_bmi/bmi_
 
   sudo apt-get update
   sudo apt-get install -y qt6-base-dev qt6-base-dev-tools libqt6opengl6-dev \
-      libgdal-dev gdal-bin gfortran cmake pkg-config make git python3-dev patchelf
+      libgdal-dev cmake pkg-config make python3-dev patchelf \
+      libopengl0 libglx0 libgl1 libegl1
 
 **При установке из готового wheel** (PyPI/TestPyPI) большинство ``.so`` уже
 забандлены ``auditwheel``, но GL-либы исключены по политике manylinux — их надо
