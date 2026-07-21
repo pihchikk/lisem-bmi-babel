@@ -11,11 +11,11 @@ maintainers = [
   {name = "pihchikk", email = "pihchikk@users.noreply.github.com"},
 ]
 description = "PyMT plugin for bmi_lisem"
-license = {text = "MIT License"}
+license = {text = "GPL-3.0-or-later"}
 classifiers=[
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3 :: Only",
@@ -34,7 +34,7 @@ dependencies = [
 homepage = "https://github.com/pihchikk/bmi_lisem"
 
 [project.entry-points."pymt.plugins"]
-Lisem = "bmi_lisem.bmi:Lisem"
+Lisem = "bmi_lisem._bmi:Lisem"
 
 [project.optional-dependencies]
 dev = [

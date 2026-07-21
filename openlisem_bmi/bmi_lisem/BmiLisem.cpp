@@ -229,6 +229,8 @@ void BmiLisem::UpdateUntil(double time)
         if (!model->Update())
             break;
     }
+    model->avgTheta();   // refresh ThetaI*a so post-event soil moisture is
+                         // current for BMI reads (Update() does this per-step)
 }
 
 void BmiLisem::Finalize()
@@ -283,8 +285,13 @@ int BmiLisem::GetVarGrid(std::string name)
 std::string BmiLisem::GetVarType(std::string name)
 {
     name = resolveVarAlias(name);
+    // Scalars are backed by TWorld 'double' members regardless of Real precision.
     if (isScalarControl(name) || isScalarOutput(name)) return "double";
-    resolveVar(name); return "double";
+    // Raster maps store 'Real', which is float or double depending on the build
+    // (see PrecisionConfig.h). Derive the type string from sizeof(Real) so the
+    // Cython layer allocates a matching-width ndarray for the raw memcpy.
+    resolveVar(name);
+    return (sizeof(Real) == sizeof(double)) ? "double" : "float";
 }
 std::string BmiLisem::GetVarUnits(std::string name)
 {
@@ -342,8 +349,13 @@ void *BmiLisem::GetValuePtr(std::string name)
     // Scalar catchment totals: return pointer to the TWorld double
     if (isScalarOutput(name))
         return static_cast<void *>(_scalar_out_ptrs.at(name));
-    // Erosion map requires on-the-fly scaling; a raw pointer would give kg/cell.
-    // Callers that need kg/m² must use GetValue instead.
+    // Erosion map is stored as kg/cell but GetValue exposes kg/m². A raw pointer
+    // would silently hand back unscaled kg/cell (wrong units), so refuse it and
+    // steer callers to GetValue, which applies the 1/_dx² scaling.
+    if (name == "soil_erosion~mass-per-area")
+        throw std::runtime_error(
+            "BmiLisem::GetValuePtr: 'soil_erosion~mass-per-area' has no pointer "
+            "representation (stored as kg/cell, exposed as kg/m2); use GetValue()");
     cTMap *m = resolveVar(name);
     return &m->data.cell(0);
 }

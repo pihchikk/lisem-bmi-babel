@@ -2,7 +2,15 @@ project(
     'bmi_lisem',
     'cpp',
     'cython',
-    version: '0.1',
+    # Single source of truth for the version: bmi_lisem/_version.py.
+    version: run_command(
+        'python3',
+        '-c',
+        'import re,pathlib;'
+        + 'print(re.search(r\'"([^"]+)"\','
+        + ' pathlib.Path("bmi_lisem/_version.py").read_text()).group(1))',
+        check: true,
+    ).stdout().strip(),
 )
 
 py = import('python').find_installation(pure: false)
