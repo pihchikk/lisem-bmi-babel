@@ -251,16 +251,37 @@ add_library(bmilisem_obj OBJECT
     include/bmi.hxx
 )
 set_target_properties(bmilisem_obj PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(BMI_HEADLESS)
+    target_compile_definitions(bmilisem_obj PUBLIC BMI_HEADLESS)
+endif()
 target_include_directories(bmilisem_obj PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/bmi_lisem
 )
 
-SET(BMI_LINK_LIBS
-    Qt6::Widgets Qt6::Gui Qt6::Core Qt6::Network
-    ${GDAL_LIBRARIES} ${QWT_LIBRARIES} ${OSSL_LIBRARIES}
-    OpenMP::OpenMP_CXX
-)
+# Optional headless build: drop the Qt GUI / QWT / OpenGL stack from the BMI
+# link line. The BMI already runs with noInterface = true, so no BMI feature is
+# lost, but the engine sources still reference Qt Widgets in interface code —
+# a fully headless build additionally needs those references guarded at the
+# source level. This option is EXPERIMENTAL: it wires the build flag and the
+# reduced link line; enabling it may require source-level #ifdef BMI_HEADLESS
+# guards before it links cleanly. Default OFF keeps the existing behaviour.
+option(BMI_HEADLESS "Build the BMI engine without Qt Gui/Widgets, QWT and OpenGL" OFF)
+
+if(BMI_HEADLESS)
+    message(STATUS "BMI_HEADLESS=ON (experimental): linking without Qt Gui/Widgets, QWT, OpenGL")
+    SET(BMI_LINK_LIBS
+        Qt6::Core Qt6::Network
+        ${GDAL_LIBRARIES} ${OSSL_LIBRARIES}
+        OpenMP::OpenMP_CXX
+    )
+else()
+    SET(BMI_LINK_LIBS
+        Qt6::Widgets Qt6::Gui Qt6::Core Qt6::Network
+        ${GDAL_LIBRARIES} ${QWT_LIBRARIES} ${OSSL_LIBRARIES}
+        OpenMP::OpenMP_CXX
+    )
+endif()
 
 # Shared library — the artifact babelizer links against (libbmilisem.so).
 add_library(bmilisem SHARED $<TARGET_OBJECTS:bmilisem_obj>)

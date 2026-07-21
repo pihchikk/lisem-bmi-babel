@@ -1,0 +1,6 @@
+# tiny synthetic rainfall (intensity in mm/h), one station
+# columns: time(min)  intensity(mm/h)
+2
+0 60
+5 60
+10 0

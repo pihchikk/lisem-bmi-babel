@@ -59,7 +59,7 @@ testing = [
 [tool.pytest.ini_options]
 minversion = "5.0"
 testpaths = ["bmi_lisem", "tests"]
-norecursedirs = [".*", "*.egg*", "build", "dist"]
+norecursedirs = [".*", "*.egg*", "build", "dist", "data"]
 addopts = """
     --ignore setup.py
     --tb native

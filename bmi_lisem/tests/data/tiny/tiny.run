@@ -1,0 +1,53 @@
+[openLISEM runfile]
+
+; Tiny 10x10 synthetic catchment for CI tests.
+; TEMPLATE / SCAFFOLD: the exact key names and required maps are specific to the
+; vendored OpenLISEM build. Reconcile against the engine's runfile parser
+; (openlisem_bmi/model/lisRunfile.cpp) in a build-capable environment before
+; relying on this for the data-dependent tests. Paths are RELATIVE so the run is
+; portable; run with the working directory set to this folder.
+
+[Work Directory]
+Map Directory=.
+Result Directory=./out
+Rainfall Directory=.
+
+[Timing]
+Begin time=0
+End time=600
+Timestep=15
+
+[Rainfall]
+Rainfall file=rain.txt
+
+[Catchment]
+LDD=ldd.map
+Dem=dem.map
+Gradient=grad.map
+Outlet=outlet.map
+Landunit=landunit.map
+
+[Infiltration]
+Ksat1=ksat1.map
+ThetaS1=thetas1.map
+ThetaI1=thetai1.map
+Psi1=psi1.map
+SoilDepth1=soildepth1.map
+
+[Surface]
+Manning=n.map
+RR=rr.map
+PlantCover=per.map
+LAI=lai.map
+PlantHeight=ch.map
+
+[Erosion]
+Cohesion=coh.map
+CohesionAdd=cohadd.map
+AggregateStability=aggrstab.map
+D50=d50.map
+
+[Options]
+No Interface=1
+Include Infiltration=1
+Include Erosion=1

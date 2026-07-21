@@ -1,0 +1,3 @@
+# Generated PCRaster inputs (produced by make_tiny.py); do not commit binaries.
+*.map
+out/

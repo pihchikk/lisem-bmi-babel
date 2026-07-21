@@ -1,0 +1,124 @@
+# Build the native BMI, install the Python package, and run pytest.
+# Unlike build-wheels.yml this workflow's purpose is to actually EXERCISE the
+# binding: the smoke tests prove the C++ links and the Cython layer works, and
+# (when a tiny dataset can be generated) the metadata / standard-name / coupling
+# tests run against a real event instead of skipping.
+
+name: test
+
+on:
+  push:
+    branches: ['feat/**', 'main', 'master']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  QWT_PREFIX: /usr/local/qwt-6.4.0-ma
+  QWT_TREEISH: "f28086d~1"
+  QWT_SUBDIR: "qwt-multiaxes-qt6"
+
+jobs:
+  test_linux:
+    name: Build native + pytest (Python ${{ matrix.python }})
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: System deps (Qt6, GDAL, toolchain)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            qt6-base-dev qt6-base-dev-tools libqt6opengl6-dev \
+            libgdal-dev gdal-bin \
+            gfortran cmake pkg-config make git python3-dev patchelf \
+            libgl1-mesa-dev
+          gdalinfo --version
+          qmake6 --version
+
+      - name: Build QWT fork (from repo history)
+        run: |
+          set -e
+          git config --global --add safe.directory "$PWD"
+          git checkout ${QWT_TREEISH} -- ${QWT_SUBDIR}
+          cd ${QWT_SUBDIR}
+          qmake6 qwt.pro
+          make -j$(nproc)
+          sudo make install
+          cd .. && git checkout HEAD -- ${QWT_SUBDIR} 2>/dev/null || true
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Patch CMakeLists — drop Qt5-era genex-leaking lines
+        run: |
+          set -e
+          CML=openlisem_bmi/CMakeLists.txt
+          cp "$CML" "$CML.bak"
+          sed -i -E '/add_definitions\(\$\{Qt6[A-Za-z]+_DEFINITIONS\}\)/d' "$CML"
+          sed -i -E '/Qt6[A-Za-z]+_EXECUTABLE_COMPILE_FLAGS/d' "$CML"
+
+      - name: Build native libbmilisem.so
+        run: |
+          set -e
+          cd openlisem_bmi
+          mkdir -p build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+          ls -la libbmilisem.so
+
+      - name: pkg-config .pc for bmilisem
+        run: |
+          set -e
+          sudo mkdir -p /usr/local/lib/pkgconfig
+          PREFIX="$PWD/openlisem_bmi"
+          sudo tee /usr/local/lib/pkgconfig/bmilisem.pc >/dev/null << EOF
+          prefix=${PREFIX}
+          libdir=\${prefix}/build
+          includedir=\${prefix}/include
+
+          Name: bmilisem
+          Description: Native BMI for OpenLISEM
+          Version: 0.1.0
+          Cflags: -I\${includedir} -I\${prefix}/bmi_lisem
+          Libs: -L\${libdir} -lbmilisem -L${QWT_PREFIX}/lib -lqwt -lgdal -lQt6Core -lQt6Gui -lQt6Widgets -lQt6Network -lgomp -lGLX -lOpenGL -lpthread
+          EOF
+
+      - name: Install package (non-editable, to avoid source shadowing)
+        env:
+          PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
+          LD_LIBRARY_PATH: /usr/local/lib:${{ env.QWT_PREFIX }}/lib:${{ github.workspace }}/openlisem_bmi/build
+          LIBRARY_PATH: /usr/local/lib:${{ env.QWT_PREFIX }}/lib
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          python -m pip install meson-python meson ninja cython numpy wheel pytest
+          python -m pip install --no-build-isolation .
+
+      - name: Generate tiny synthetic catchment (best-effort; needs pcraster)
+        continue-on-error: true
+        run: |
+          set -e
+          python -m pip install pcraster || { echo "pcraster unavailable; data tests will skip"; exit 0; }
+          python bmi_lisem/tests/data/tiny/make_tiny.py
+
+      - name: Run pytest (from /tmp so the source tree does not shadow the wheel)
+        env:
+          LD_LIBRARY_PATH: /usr/local/lib:${{ env.QWT_PREFIX }}/lib:${{ github.workspace }}/openlisem_bmi/build
+        run: |
+          set -e
+          # Smoke tests must PASS (they prove the build); data tests may skip.
+          cp -r bmi_lisem/tests /tmp/lisem_tests
+          # keep the generated tiny data (if any) alongside the copied tests
+          cd /tmp
+          python -m pytest -q --no-header \
+            -o addopts="" \
+            "$GITHUB_WORKSPACE/bmi_lisem/tests" -rs

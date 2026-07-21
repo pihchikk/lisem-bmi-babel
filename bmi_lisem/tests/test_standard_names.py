@@ -16,10 +16,11 @@ import os
 import numpy as np
 import pytest
 
-RUNFILE = os.environ.get("LISEM_TEST_RUNFILE", "")
+from bmi_lisem.tests._runfile import resolve_runfile
+RUNFILE = resolve_runfile()
 needs_runfile = pytest.mark.skipif(
     not RUNFILE,
-    reason="LISEM_TEST_RUNFILE not set; no input data available",
+    reason="no runfile: set LISEM_TEST_RUNFILE or generate tests/data/tiny",
 )
 
 # Full alias table: legacy CSDMS name -> canonical ESoil name.
