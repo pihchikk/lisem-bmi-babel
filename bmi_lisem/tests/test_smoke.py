@@ -46,7 +46,7 @@ def test_alias_names_are_expected_set():
     This does not touch the native model; it guards the canonical/legacy name
     lists used by the data-dependent tests from silent drift.
     """
-    from bmi_lisem.tests.test_standard_names import ALIASES
+    from test_standard_names import ALIASES
     # every canonical name must be distinct and use single underscores / tildes
     canon = list(ALIASES.values())
     assert len(canon) == len(set(canon)), "duplicate canonical names"

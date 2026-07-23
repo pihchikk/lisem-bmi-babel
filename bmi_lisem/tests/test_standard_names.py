@@ -16,7 +16,7 @@ import os
 import numpy as np
 import pytest
 
-from bmi_lisem.tests._runfile import resolve_runfile
+from _runfile import resolve_runfile
 RUNFILE = resolve_runfile()
 needs_runfile = pytest.mark.skipif(
     not RUNFILE,

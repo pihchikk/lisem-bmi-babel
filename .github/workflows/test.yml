@@ -110,15 +110,21 @@ jobs:
           python -m pip install pcraster || { echo "pcraster unavailable; data tests will skip"; exit 0; }
           python bmi_lisem/tests/data/tiny/make_tiny.py
 
-      - name: Run pytest (from /tmp so the source tree does not shadow the wheel)
+      - name: Run pytest (against the installed wheel, not the source tree)
         env:
           LD_LIBRARY_PATH: /usr/local/lib:${{ env.QWT_PREFIX }}/lib:${{ github.workspace }}/openlisem_bmi/build
         run: |
           set -e
+          # Copy the tests OUT of the repo and run them from there. This is the
+          # decisive fix for source-shadowing: from /tmp/lisem_tests the repo's
+          # bmi_lisem/ package is not on sys.path, so `import bmi_lisem` resolves
+          # to the INSTALLED wheel (which carries the compiled lib/lisem
+          # extension). The tests use sibling imports (_runfile, test_standard_
+          # names) so they work as loose modules. Any generated tiny dataset is
+          # copied along (the generate step ran first).
+          # -o addopts="" drops the repo's --doctest-modules/--strict defaults.
           # Smoke tests must PASS (they prove the build); data tests may skip.
-          cp -r bmi_lisem/tests /tmp/lisem_tests
-          # keep the generated tiny data (if any) alongside the copied tests
-          cd /tmp
-          python -m pytest -q --no-header \
-            -o addopts="" \
-            "$GITHUB_WORKSPACE/bmi_lisem/tests" -rs
+          rm -rf /tmp/lisem_tests
+          cp -r "$GITHUB_WORKSPACE/bmi_lisem/tests" /tmp/lisem_tests
+          cd /tmp/lisem_tests
+          python -m pytest -q --no-header -rs -o addopts="" .

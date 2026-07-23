@@ -14,7 +14,7 @@ import math
 import numpy as np
 import pytest
 
-from bmi_lisem.tests._runfile import resolve_runfile
+from _runfile import resolve_runfile
 RUNFILE = resolve_runfile()
 needs_runfile = pytest.mark.skipif(
     not RUNFILE,
@@ -74,6 +74,16 @@ def _run_to_end(m):
     end = m.get_end_time()
     while m.get_current_time() < end - 1e-9:
         m.update()
+
+
+def _read(m, name):
+    """Read a variable into a fresh numpy array via get_value (works for
+    rasters, scalars, and the scaled erosion map alike)."""
+    grid = m.get_var_grid(name)
+    n = m.get_grid_size(grid)
+    buff = np.empty(n, dtype=np.float64)
+    m.get_value(name, buff)
+    return buff
 
 
 # ---------------------------------------------------------------------------
@@ -160,11 +170,11 @@ class TestPostEventValues:
             if "soil_water_actual_layer-1" not in out_vars:
                 pytest.skip("soil_water_actual_layer-1 not registered")
 
-            theta0_flat = m.get_value_ref("soil_water_actual").copy()
+            theta0_flat = _read(m, "soil_water_actual")
 
             _run_to_end(m)
 
-            theta1_flat = m.get_value_ref("soil_water_actual_layer-1").copy()
+            theta1_flat = _read(m, "soil_water_actual_layer-1")
 
             # Must be finite and within [0, 1]
             assert np.all(np.isfinite(theta1_flat)), "post-event θ1a contains non-finite values"
@@ -190,7 +200,7 @@ class TestPostEventValues:
 
             _run_to_end(m)
 
-            erosion_flat = m.get_value_ref("soil_erosion~mass-per-area").copy()
+            erosion_flat = _read(m, "soil_erosion~mass-per-area")
             valid = erosion_flat[np.isfinite(erosion_flat)]
             assert len(valid) > 0, "all erosion values are NaN/inf"
             assert np.all(valid >= 0), "erosion map contains negative kg/m² values"
@@ -206,12 +216,12 @@ class TestPostEventValues:
             if "soil_layer-depth~layer-1" not in out_vars:
                 pytest.skip("soil_layer-depth~layer-1 not registered")
 
-            depth0 = m.get_value_ref("soil_layer-depth~layer-1").copy()
+            depth0 = _read(m, "soil_layer-depth~layer-1")
             assert np.all(depth0[np.isfinite(depth0)] > 0), "soil_layer-depth~layer-1 has non-positive values"
 
             _run_to_end(m)
 
-            depth1 = m.get_value_ref("soil_layer-depth~layer-1").copy()
+            depth1 = _read(m, "soil_layer-depth~layer-1")
             np.testing.assert_array_equal(depth0, depth1,
                                           err_msg="soil_layer-depth~layer-1 changed during the run")
         finally:
