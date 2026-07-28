@@ -21,6 +21,8 @@ physical coupling with AquaCrop and other soil-water models.
 | `soil__layer_depth_2`                    | `model->SoilDepth2` | `m` | 0 | `soil_depth~layer-2` (COINED-pending) |
 | `soil__layer_depth_3`                    | `model->SoilDepth3` | `m` | 0 | `soil_depth~layer-3` (COINED-pending) |
 | `soil__erosion_mass_per_area`            | `model->TotalSoillossMap` ÷ `_dx²` | `kg m-2` | 0 | `soil_erosion_amount` (COINED-pending) |
+| `atmosphere_water__precipitation_leq-depth` | `model->RainCumFlat` | `m` | 0 | `surface-water~rainfall_amount` |
+| `surface_water__runoff_depth`            | `model->Qm3total` ÷ `_dx²` | `m` | 0 | `surface-water~runoff_amount` |
 
 ### Notes on inactive layers
 
@@ -50,6 +52,42 @@ values are valid at t₀.
 `lisReportmaps.cpp` lines 138–147 (`ErosionUnits == 2, factor = 1.0/(_dx*_dx)`).
 `GetValuePtr` returns the raw kg/cell pointer; callers that need kg/m² must use
 `GetValue`.
+
+### Per-cell rainfall and runoff
+
+Added for Gate 7.2's system-level conservation check (`docs/bmi/GATE7_2_COUPLING.md` in
+`aquacrop-rs`), which needs a per-cell water balance and had no per-cell rainfall or runoff
+exposure before this. Both are created via `NewMap()` in `lisDataInit.cpp`, exactly like `Fcum`, so
+both are auto-registered in the generic reset registry (`maplistCTMap`, see `NewMap()`'s own
+implementation in `lisDataFunctions.cpp`) and zeroed by `model__reset_event` — **cumulative since
+the last reset (or simulation start), in metres, identical temporal semantics and units to
+`soil_infiltration~amount`** (confirmed directly, not assumed: `bmi_lisem/tests/test_coupling_vars.py`'s
+`test_rainfall_and_runoff_reset_with_model_reset_event`).
+
+**Rainfall** (`RainCumFlat`): the *flat* (slope-unadjusted) cumulative rain depth — the exact field
+`lisReportmaps.cpp`'s own `rainfall.map` output is derived from (`*1000` there for mm display;
+exposed here in metres, unscaled, matching `Fcum`'s own convention). Verified against that same map
+file for the same run: max residual `1.1e-7` mm.
+
+**Runoff** (`Qm3total`): cumulative *discharge volume routed through this cell* (`Qn*_dt` summed,
+`lisTotalsMB.cpp:347`) — **not local runoff generation net of upstream inflow**. LISEM's SWOF solver
+has no separate "generate, then route" step the way a curve-number scheme would (it solves a coupled
+2D shallow-water system, so there is no physically separate "this cell's own contribution" once flow
+has begun moving between cells). A commented-out, genuinely unused `runoffTotalCell` field exists in
+`lisTotalsMB.cpp` with a *derived* formula (`rain - interception - infiltration`, floored at 0) —
+deliberately not used here, since wiring a residual-derived quantity would make any balance check
+using it close by construction rather than by an independent measurement. `Qm3total` is scaled from
+m³ to a per-cell depth (m) at `GetValue` time by dividing by cell area (same pattern as the erosion
+scaling above), so the per-cell balance's units are consistent (rainfall/infiltration/runoff/storage
+all in metres). Verified against `Qm3total`'s own map output (`Flowcumm3.map` for the VNIIMZ_20m
+test config) for the same run: max residual `1.2e-4` m³ (compared before the m³→m conversion) on
+values up to `~3043` m³.
+
+**Disclosed limitation, not hidden**: because `Qm3total` includes water merely routed *through* a
+cell (not just generated at it), a per-cell balance using `surface-water~runoff_amount` is expected
+to close best for headwater/low-accumulation cells and worse for downstream cells receiving
+significant upstream flow — this is a property of what LISEM actually computes, not an exposure bug.
+See `docs/bmi/GATE7_2_COUPLING.md` for measured per-cell numbers on both kinds.
 
 ## Scalar outputs (grid 1, rank 0, size 1)
 

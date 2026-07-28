@@ -104,6 +104,8 @@ std::string BmiLisem::resolveVarAlias(const std::string &name)
         { "domain_evapotranspiration__volume",      "surface-water~evapotranspiration_volume" },
         { "domain_soil_water_storage__volume",      "surface-water~storage_volume" },
         { "domain_runoff__volume",                  "surface-water~runoff_volume" },
+        { "atmosphere_water__precipitation_leq-depth", "surface-water~rainfall_amount" },
+        { "surface_water__runoff_depth",            "surface-water~runoff_amount" },
     };
     auto it = kAlias.find(name);
     return it == kAlias.end() ? name : it->second;
@@ -145,6 +147,34 @@ void BmiLisem::buildVarRegistry()
         { "soil_layer-depth~layer-3",             model->SoilDepth3,     "m",      false, true  },
         // net soil loss per unit area (TotalSoillossMap is in kg/cell; scaled in GetValue)
         { "soil_erosion~mass-per-area",           model->TotalSoillossMap, "kg m-2", false, true },
+        // Per-cell rainfall and runoff (Gate 7.2 check (c) blocker -- see
+        // docs/COUPLING_VARS_LEDGER.md's "Per-cell rainfall and runoff" section for the full
+        // rationale). Both cumulative-since-last-reset, in metres, matching soil_infiltration~amount
+        // exactly -- both are created via NewMap() like Fcum, so both are auto-registered in
+        // maplistCTMap and zeroed by the same model__reset_event mechanism (verified, not assumed;
+        // see NewMap()'s own maplistCTMap registration in lisDataFunctions.cpp).
+        //
+        // Rainfall: RainCumFlat is the *flat* (slope-unadjusted) cumulative rain depth in metres --
+        // the exact field lisReportmaps.cpp's own rainfall.map is derived from (*1000 for mm
+        // display there; exposed here in metres, unscaled, matching Fcum's own convention).
+        { "surface-water~rainfall_amount",        model->RainCumFlat,    "m",      false, true  },
+        // Runoff: Qm3total is cumulative *discharge volume routed through this cell* (Qn*_dt summed,
+        // lisTotalsMB.cpp:347) -- NOT local runoff generation net of upstream inflow. LISEM's SWOF
+        // solver has no separate "generated before routing" step (a real 2D dynamic-wave model,
+        // unlike a curve-number scheme); a genuinely unused, commented-out `runoffTotalCell` field
+        // exists in lisTotalsMB.cpp with a *derived* formula (rain-interception-infiltration,
+        // floored at 0) that was deliberately NOT used here -- wiring a residual-derived quantity
+        // would make any balance check that uses it close by construction, not by an independent
+        // measurement. Qm3total is scaled from m3 to a per-cell depth (m) at GetValue time by
+        // dividing by cell area (_dx*_dx), the same GetValue-time-scaling pattern already used for
+        // soil_erosion~mass-per-area, so the per-cell balance's units are consistent
+        // (rain/infiltration/runoff/storage all in metres) without a separate conversion step.
+        // Consequence, disclosed not hidden: for cells receiving significant upstream flow, this
+        // depth-equivalent overstates "locally generated" runoff (it includes water merely passing
+        // through) -- the per-cell balance is expected to close best for headwater/low-accumulation
+        // cells and worse for downstream ones. See docs/bmi/GATE7_2_COUPLING.md's verification for
+        // measured numbers on both kinds.
+        { "surface-water~runoff_amount",          model->Qm3total,       "m",      false, true  },
     };
 
     for (const VarDef &d : defs) {
@@ -340,6 +370,17 @@ void BmiLisem::GetValue(std::string name, void *dest)
             out[i] = m->data.cell(static_cast<size_t>(i)) * factor;
         return;
     }
+    // Runoff is stored as Qm3total, a cumulative discharge *volume* (m3) per cell; expose as a
+    // depth (m) by dividing by cell area, so it's unit-consistent with the other per-cell water
+    // terms (rainfall/infiltration, both metres) -- same scale-at-read pattern as erosion above.
+    if (name == "surface-water~runoff_amount") {
+        const Real factor = static_cast<Real>(1.0 / (model->_dx * model->_dx));
+        Real *out = static_cast<Real *>(dest);
+        const int n = nCells();
+        for (int i = 0; i < n; ++i)
+            out[i] = m->data.cell(static_cast<size_t>(i)) * factor;
+        return;
+    }
     std::memcpy(dest, &m->data.cell(0), static_cast<size_t>(nCells()) * sizeof(Real));
 }
 
@@ -356,6 +397,10 @@ void *BmiLisem::GetValuePtr(std::string name)
         throw std::runtime_error(
             "BmiLisem::GetValuePtr: 'soil_erosion~mass-per-area' has no pointer "
             "representation (stored as kg/cell, exposed as kg/m2); use GetValue()");
+    if (name == "surface-water~runoff_amount")
+        throw std::runtime_error(
+            "BmiLisem::GetValuePtr: 'surface-water~runoff_amount' has no pointer "
+            "representation (stored as m3/cell, exposed as m); use GetValue()");
     cTMap *m = resolveVar(name);
     return &m->data.cell(0);
 }
