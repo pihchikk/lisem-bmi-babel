@@ -95,14 +95,55 @@ All values are in **m³** (volumetric totals over the catchment).  Sources are
 `double` members of `TWorld`, updated by `MassBalance()` every timestep.
 See `openlisem_bmi/model/lisTotalsMB.cpp` for the exact accumulation logic.
 
-| C++ BMI name | `TWorld` member | Units | Standard project name |
+| C++ BMI name | Source | Units | Standard project name |
 |---|---|---|---|
 | `domain_rainfall__volume`             | `RainTot`      | `m3` | `air_precipitation_amount~catchment` (COINED-pending) |
 | `domain_interception__volume`         | `IntercTot`    | `m3` | `plant_interception_amount~catchment` (COINED-pending) |
 | `domain_infiltration__volume`         | `InfilTot`     | `m3` | `soil_infiltration_amount~catchment` (COINED-pending) |
 | `domain_evapotranspiration__volume`   | `ETaTotVol`    | `m3` | `air_evapotranspiration~catchment` (COINED-pending) |
-| `domain_soil_water_storage__volume`   | `SoilMoistTot` | `m3` | `soil_water_storage~catchment` (COINED-pending) |
+| `domain_soil_water_storage__volume`   | `SoilMoistTot` | `m3` | `soil_water_storage~catchment` (COINED-pending) → canonical `soil_water~storage_volume` |
+| —                                      | `_surfaceStorageVolume` (`BmiLisem`-owned, not a `TWorld` member) | `m3` | canonical `surface-water~storage_volume` (previously misbacked by `SoilMoistTot` — **fixed**, see below) |
 | `domain_runoff__volume`               | `Qtot`         | `m3` | `water~surface_runoff~catchment` (COINED-pending) |
+
+### `surface-water~storage_volume` fix (2026-07-28)
+
+**Previously backed by `SoilMoistTot`** — soil moisture, not surface storage, despite the name.
+Root cause was purely a naming/wiring mismatch, not a computation bug: the *alias table's own*
+legacy entry (`domain_soil_water_storage__volume`) already correctly identified `SoilMoistTot` as a
+**soil water** quantity — it was only the *canonical* name (`surface-water~storage_volume`) that was
+wrong.
+
+**Fixed by separating the two concerns**, not by simply repointing the name:
+- `surface-water~storage_volume` now backs `BmiLisem::_surfaceStorageVolume`
+  (`recomputeSurfaceStorage()`), a live per-cell sum of `model->MicroStoreVol` — the exact quantity
+  `lisTotalsMB.cpp`'s own `SStot`/`SurfStoremm` (the source of `totalseries.csv`'s `SS(mm)` column)
+  is built from, recomputed after every `Initialize()`/`Update()`/`model__reset_event` (the same
+  read-lag discipline task #26 established — see `Blocker 1`/task #26 write-ups in `aquacrop-rs`).
+- `SoilMoistTot` moved to its own, correctly-named `soil_water~storage_volume` — the balance term is
+  **not dropped**, just accurately labeled. The legacy alias `domain_soil_water_storage__volume` now
+  points here, matching its own original semantic intent.
+
+**Important disclosure, not a regression from this fix**: `SoilMoistTot` is effectively **dead
+code** — `SoilMoistDiff` (the only thing ever added to it, `lisTotalsMB.cpp:174`) is *never assigned
+a nonzero value anywhere in the active codebase*; its one real computation
+(`SoilMoistDiff = soiltot2 - soiltot1`, `lisModel.cpp:652`) is commented out. `SoilMoistTot` reads
+`0.0` for every run, regardless of infiltration method — confirmed directly, not assumed, before and
+after this fix, same runfile. `soil_water~storage_volume` is now correctly *named*, but it is not
+currently a *functioning* balance term; a coupling partner reading it should not expect a nonzero
+value until `SoilMoistDiff` is actually wired up (out of this task's scope — flagged, not fixed).
+
+**Verified**: catchment balance (`RainTot = IntercTot + InfilTot + ETaTotVol + SoilMoistTot +
+_surfaceStorageVolume + Qtot`) on the VNIIMZ_20m test config, same run used throughout this ledger:
+peak residual **5.50 mm**-equivalent (was ~7-8mm-equivalent before the fix), decaying to **0.66
+mm**-equivalent by the end of the run — matching `totalseries.csv`'s own `SS(mm)`-based check
+tightness (5.5mm max) to two significant figures, as intended.
+
+**Audit for other name/backing mismatches** (same task): checked all five other scalar sources
+(`RainTot`, `IntercTot`, `InfilTot`, `ETaTotVol`, `Qtot`) directly in `lisTotalsMB.cpp` — all are
+live, actively-computed accumulators with names matching what they compute; no other mismatch found
+in the scalar registry. Grid-0 (per-cell) raster variables were not re-audited from scratch here
+(established/tested in earlier phases of this project); a full audit of those is a possible
+follow-up, not attempted in this pass.
 
 ### Source lines in `lisTotalsMB.cpp`
 
@@ -111,7 +152,8 @@ line  58:  RainTot += ptot*_dx*_dx;               // m3, per timestep
 line  82:  IntercTot = MapTotal(*Interc);          // m3
 line  90:  ETaTotVol = (ETaTot-SoilETMBcorrection)*_dx*_dx;  // m3
 line 132:  InfilTot += MapTotal(*InfilVol);        // m3
-line 174:  SoilMoistTot += SoilMoistDiff;         // m3, cumulative
+line 154-159: SStot = ΣMicroStoreVol; SurfStoremm = SStot*catchmentAreaFlatMM;  // m3 -> mm, report-only
+line 174:  SoilMoistTot += SoilMoistDiff;         // m3, cumulative -- SoilMoistDiff never assigned, dead code
 line 371:  Qtot += Qtot_dt;                        // m3, total outflow
 ```
 
@@ -132,11 +174,15 @@ Rain ≈ Interception + Infiltration + ET + ΔSoilStorage + Runoff
 
 ## Residual balance: possible unaccounted terms
 
-The simplified balance may not close exactly.  Known unaccounted members:
+**Update (2026-07-28)**: `_surfaceStorageVolume` (`ΣMicroStoreVol` = `ΣWHstore` weighted by channel-
+adjusted cell width, `hydro/lisSurfstor.cpp`) is now in the balance via `surface-water~storage_volume`
+— this was the dominant unaccounted term (peak residual dropped from ~7-8mm-equivalent to 5.5mm on
+the VNIIMZ_20m test config, matching `totalseries.csv`'s own `SS(mm)`-based tightness). The remaining
+terms below are still **not** exposed through BMI and account for the residual that's left:
 
 | Term | `TWorld` member | Comment |
 |---|---|---|
-| Initial surface water storage | `WHinitVolTot` | Non-zero if there is ponded water at t₀ |
+| Initial surface water storage | `WHinitVolTot` | Non-zero if there is ponded water at t₀ — distinct from `MicroStoreVol`'s *current* storage |
 | Channel storage | `ChannelVolTot` | Water remaining in channels at end of event |
 | Retention storage | `RetentionVolTot` | Retention/detention basins |
 | Storm drain | `StormDrainVolTot` | If storm-drain option active |
@@ -145,6 +191,8 @@ The simplified balance may not close exactly.  Known unaccounted members:
 | Tile drain outflow | `QTiletot` | Included in `waterout` but not in simplified runoff |
 | Boundary outflow | `QBoundaryTot` | Included in `Qtot` via `floodBoundaryTot` |
 
-If `test_coupling_vars.py::TestWaterBalance::test_balance_closure` shows a
-residual > 5 %, check which of the above terms is significant for the test
-runfile and add it to the balance equation or document it here.
+`test_coupling_vars.py::TestWaterBalance::test_balance_closure`'s 5% tolerance now passes on the
+VNIIMZ_20m test config (previously `xfail`'d) — see that test for the current formula, which now
+includes `soil_water~storage_volume` and `surface-water~storage_volume` as two separate terms rather
+than one mislabeled one. If a *different* runfile still shows a residual above tolerance, check
+which of the above still-unaccounted terms is significant for it before assuming a new defect.

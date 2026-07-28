@@ -117,6 +117,14 @@ private:
     std::map<std::string, double*>     _scalar_out_ptrs;   // points into TWorld members
     std::map<std::string, std::string> _scalar_out_units;
 
+    // Catchment-total surface (ponding/micro-storage) water volume, m3 -- NOT a TWorld member
+    // (TWorld only computes the equivalent SS(mm) inline, per-report, in lisTotalsMB.cpp; see
+    // docs/COUPLING_VARS_LEDGER.md's "surface-water~storage_volume" note). Recomputed by
+    // recomputeSurfaceStorage() after every Initialize()/Update(), then exposed via the normal
+    // pointer-based scalar mechanism like every other catchment total.
+    double _surfaceStorageVolume = 0.0;
+    void recomputeSurfaceStorage();   // sums model->MicroStoreVol into _surfaceStorageVolume
+
     void buildVarRegistry();          // wire standard names to TWorld maps
     // Alias resolver: maps legacy CSDMS names to canonical ESoil standard
     // names; canonical (and unknown) names pass through unchanged. Called at

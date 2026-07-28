@@ -238,13 +238,21 @@ class TestPostEventValues:
 
 class TestWaterBalance:
     """
-    Check that the catchment totals close the simplified balance:
-        Rain ≈ Interception + Infiltration + ET + ΔSoilStorage + Runoff
+    Check that the catchment totals close the balance:
+        Rain ~ Interception + Infiltration + ET + dSoilStorage + dSurfaceStorage + Runoff
 
-    A 5 % relative tolerance is applied. If the balance does not close,
-    the residual is reported but the test is marked xfail so the suite
-    remains informative.  See docs/COUPLING_VARS_LEDGER.md §"Residual"
-    for notes on unaccounted terms (WH retention, channel storage, …).
+    surface-water~storage_volume was previously misbacked by SoilMoistTot (soil moisture, not
+    surface storage) -- see docs/COUPLING_VARS_LEDGER.md's "surface-water~storage_volume fix" for
+    the full story. Fixed: it now backs a live sum of MicroStoreVol, and SoilMoistTot moved to its
+    own correctly-named soil_water~storage_volume (currently always 0.0 -- SoilMoistDiff, the only
+    thing ever added to it, is dead code; included in the formula anyway for when/if that changes).
+
+    A 5% relative tolerance is applied, matching totalseries.csv's own SS(mm)-based closure
+    tightness on the VNIIMZ_20m test config (peak residual 5.5mm-equivalent). If the balance does
+    not close on a *different* runfile, the residual is reported but the test is marked xfail so the
+    suite remains informative rather than blocking on config-specific unaccounted terms (WH init,
+    channel storage, retention, storm drain -- see docs/COUPLING_VARS_LEDGER.md's "Residual balance"
+    section for the full list of what's still not exposed through BMI).
     """
 
     BALANCE_TOL = 0.05   # 5 % relative tolerance
@@ -264,10 +272,11 @@ class TestWaterBalance:
             interc = scalar("surface-water~interception_volume")
             infil  = scalar("surface-water~infiltration_volume")
             et     = scalar("surface-water~evapotranspiration_volume")
-            dstorage = scalar("surface-water~storage_volume")
+            dsurface_storage = scalar("surface-water~storage_volume")
+            dsoil_storage = scalar("soil_water~storage_volume")
             runoff = scalar("surface-water~runoff_volume")
 
-            residual = rain - (interc + infil + et + dstorage + runoff)
+            residual = rain - (interc + infil + et + dsurface_storage + dsoil_storage + runoff)
             rel_err  = abs(residual) / max(abs(rain), 1e-12)
 
             # Record for diagnostics even if xfail
@@ -275,14 +284,15 @@ class TestWaterBalance:
                 f"Water balance residual: {residual:.4g} m3  "
                 f"(rel {rel_err*100:.2f}%)  "
                 f"rain={rain:.4g}, interc={interc:.4g}, infil={infil:.4g}, "
-                f"et={et:.4g}, dstorage={dstorage:.4g}, runoff={runoff:.4g}"
+                f"et={et:.4g}, dsurface_storage={dsurface_storage:.4g}, "
+                f"dsoil_storage={dsoil_storage:.4g}, runoff={runoff:.4g}"
             )
 
             if rel_err > self.BALANCE_TOL:
                 pytest.xfail(
                     f"Balance does not close within {self.BALANCE_TOL*100:.0f}%: {msg}\n"
                     "See docs/COUPLING_VARS_LEDGER.md §'Residual balance' for known "
-                    "unaccounted terms (WH storage, channel storage, drain, retention)."
+                    "unaccounted terms (WH init storage, channel storage, drain, retention)."
                 )
             else:
                 assert rel_err <= self.BALANCE_TOL, msg

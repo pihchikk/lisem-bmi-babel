@@ -10,6 +10,7 @@
 
 #include <stdexcept>
 #include <cstring>          // memcpy
+#include <cmath>            // isnan
 #include <unordered_map>   // alias table
 
 #include <QLocale>
@@ -65,6 +66,7 @@ void BmiLisem::Initialize(std::string config_file)
 
     model->Initialize();   // InitializeStatic + SnapshotInitialState + scalar resets
     model->avgTheta();     // initialise ThetaI*a so they are valid at t0
+    recomputeSurfaceStorage();  // initialise _surfaceStorageVolume so it's valid at t0
 
     buildVarRegistry();    // maps are allocated now — wire standard names to them
 }
@@ -102,7 +104,7 @@ std::string BmiLisem::resolveVarAlias(const std::string &name)
         { "domain_interception__volume",            "surface-water~interception_volume" },
         { "domain_infiltration__volume",            "surface-water~infiltration_volume" },
         { "domain_evapotranspiration__volume",      "surface-water~evapotranspiration_volume" },
-        { "domain_soil_water_storage__volume",      "surface-water~storage_volume" },
+        { "domain_soil_water_storage__volume",      "soil_water~storage_volume" },
         { "domain_runoff__volume",                  "surface-water~runoff_volume" },
         { "atmosphere_water__precipitation_leq-depth", "surface-water~rainfall_amount" },
         { "surface_water__runoff_depth",            "surface-water~runoff_amount" },
@@ -192,18 +194,30 @@ void BmiLisem::buildVarRegistry()
     _all_units["model__reset_event"] = "1";
 
     // --- Scalar (grid 1) outputs: catchment water-balance totals (all m3) ---
-    // Sources: TWorld double members updated by MassBalance() each timestep.
-    // Balance: RainTot = IntercTot + InfilTot + ETaTotVol + SoilMoistTot + Qtot
-    // (see lisTotalsMB.cpp lines 540-542 for the full MB equation)
+    // Sources: TWorld double members updated by MassBalance() each timestep, except
+    // surface-water~storage_volume (see below).
+    // Balance: RainTot = IntercTot + InfilTot + ETaTotVol + SoilMoistTot + SurfaceStorage + Qtot
+    // (see lisTotalsMB.cpp lines 540-542 for the full MB equation; SurfaceStorage is
+    // recomputeSurfaceStorage()'s own sum, not a named term there -- see its docs)
+    //
+    // NOTE on the fix below: this variable was previously backed by model->SoilMoistTot -- soil
+    // moisture, not surface storage, despite the name (docs/COUPLING_VARS_LEDGER.md's "Per-cell
+    // rainfall and runoff" section and Gate 7.2's Step 0 finding in aquacrop-rs). SoilMoistTot is a
+    // real, distinct, needed balance term -- moved to its own correctly-named
+    // soil_water~storage_volume below, not dropped. surface-water~storage_volume now backs
+    // _surfaceStorageVolume (recomputeSurfaceStorage(), summing model->MicroStoreVol -- the exact
+    // quantity LISEM's own totalseries.csv SS(mm) column is derived from), matching what the name
+    // actually promises.
     struct ScalarDef { const char *name; double *ptr; const char *units; };
     const ScalarDef sdefs[] = {
-        { "surface-water~rainfall_volume",           &model->RainTot,      "m3" },
-        { "surface-water~interception_volume",       &model->IntercTot,    "m3" },
-        { "surface-water~infiltration_volume",       &model->InfilTot,     "m3" },
-        { "surface-water~evapotranspiration_volume", &model->ETaTotVol,    "m3" },
-        { "surface-water~storage_volume",            &model->SoilMoistTot, "m3" },
+        { "surface-water~rainfall_volume",           &model->RainTot,          "m3" },
+        { "surface-water~interception_volume",       &model->IntercTot,        "m3" },
+        { "surface-water~infiltration_volume",       &model->InfilTot,         "m3" },
+        { "surface-water~evapotranspiration_volume", &model->ETaTotVol,        "m3" },
+        { "surface-water~storage_volume",            &_surfaceStorageVolume,   "m3" },
+        { "soil_water~storage_volume",               &model->SoilMoistTot,     "m3" },
         // Qtot is the total outflow used to close the MB (lisTotalsMB.cpp line 371/542)
-        { "surface-water~runoff_volume",             &model->Qtot,         "m3" },
+        { "surface-water~runoff_volume",             &model->Qtot,             "m3" },
     };
     for (const ScalarDef &s : sdefs) {
         _scalar_out_names.emplace_back(s.name);
@@ -243,12 +257,36 @@ cTMap *BmiLisem::refMap() const
     return model->LDD;
 }
 
+void BmiLisem::recomputeSurfaceStorage()
+{
+    // Mirrors lisTotalsMB.cpp's own SStot computation (SStot += MicroStoreVol->Drc, inside a
+    // FOR_ROW_COL_MV_L masked loop) as closely as a wrapper-side sum can: MicroStoreVol is already a
+    // per-cell *volume* (m3, = CHAdjDX * WHstore, hydro/lisSurfstor.cpp), so no area scaling is
+    // needed here, unlike the runoff exposure above. Out-of-catchment cells read as NaN through this
+    // same raw per-cell access pattern (confirmed directly for the sibling rainfall/runoff exposure,
+    // same underlying MaskedRaster storage) -- skipped here exactly as LISEM's own masked internal
+    // loop would skip them, not summed as 0 and not left to propagate NaN into the total.
+    if (!model || !model->MicroStoreVol) {
+        _surfaceStorageVolume = 0.0;
+        return;
+    }
+    double total = 0.0;
+    const int n = nCells();
+    for (int i = 0; i < n; ++i) {
+        const double value = model->MicroStoreVol->data.cell(static_cast<size_t>(i));
+        if (!std::isnan(value))
+            total += value;
+    }
+    _surfaceStorageVolume = total;
+}
+
 void BmiLisem::Update()
 {
     if (!model)
         throw std::runtime_error("BmiLisem::Update: not initialized");
     model->Update();
     model->avgTheta();   // keep ThetaI*a current for BMI reads
+    recomputeSurfaceStorage();  // keep _surfaceStorageVolume current for BMI reads
 }
 
 void BmiLisem::UpdateUntil(double time)
@@ -261,6 +299,7 @@ void BmiLisem::UpdateUntil(double time)
     }
     model->avgTheta();   // refresh ThetaI*a so post-event soil moisture is
                          // current for BMI reads (Update() does this per-step)
+    recomputeSurfaceStorage();  // same reasoning, for _surfaceStorageVolume
 }
 
 void BmiLisem::Finalize()
@@ -414,7 +453,15 @@ void BmiLisem::SetValue(std::string name, void *src)
 {
     name = resolveVarAlias(name);
     // Control signal: any write triggers ResetEvent; the buffer value is ignored.
-    if (name == "model__reset_event") { model->ResetEvent(); return; }
+    if (name == "model__reset_event") {
+        model->ResetEvent();
+        // MicroStoreVol is reset along with every other maplistCTMap-registered map, but
+        // _surfaceStorageVolume is a wrapper-owned cache -- recompute now or a read immediately
+        // after this call (no intervening Update()) would return stale pre-reset data, the exact
+        // task #26 read-lag pattern this wrapper was just fixed to not repeat.
+        recomputeSurfaceStorage();
+        return;
+    }
 
     cTMap *m = resolveVar(name);
     const size_t nbytes = m->data.nr_cells() * sizeof(Real);
