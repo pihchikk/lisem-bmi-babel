@@ -41,6 +41,7 @@ SCALAR_OUTPUTS = [
     "surface-water~infiltration_volume",
     "surface-water~evapotranspiration_volume",
     "surface-water~storage_volume",
+    "soil_water~storage_volume",
     "surface-water~runoff_volume",
 ]
 
@@ -59,6 +60,7 @@ EXPECTED_UNITS = {
     "surface-water~infiltration_volume": "m3",
     "surface-water~evapotranspiration_volume": "m3",
     "surface-water~storage_volume": "m3",
+    "soil_water~storage_volume": "m3",
     "surface-water~runoff_volume": "m3",
 }
 
@@ -329,6 +331,38 @@ def _read_pcraster(path):
     array = np.frombuffer(raw, dtype=np.float32).astype(np.float64).flatten()
     nodata = band.GetNoDataValue()
     return array, nodata
+
+
+class TestSoilMoistTotIsDeadCode:
+    """`soil_water~storage_volume` (SoilMoistTot) is correctly *named* as of the
+    surface-water~storage_volume fix, but it is not currently a *functioning* balance term:
+    SoilMoistDiff, the only thing ever added to it (lisTotalsMB.cpp:174), is never assigned a
+    nonzero value anywhere in the active codebase -- its one real computation
+    (SoilMoistDiff = soiltot2 - soiltot1) is commented out in lisModel.cpp.
+
+    This asserts the CURRENT behavior (always 0.0) as an explicit contract, not an oversight: if
+    SoilMoistDiff is ever wired up for real, this test will fail and force a conscious update here
+    and in docs/COUPLING_VARS_LEDGER.md, rather than the variable silently starting to report
+    something different from what its own documentation says.
+    """
+
+    @needs_runfile
+    def test_soil_moisture_storage_reads_zero(self):
+        m = _make_model()
+        try:
+            if "soil_water~storage_volume" not in m.get_output_var_names():
+                pytest.skip("soil_water~storage_volume not registered for this run config")
+            _run_to_end(m)
+            arr = np.zeros(1, dtype=np.float64)
+            m.get_value("soil_water~storage_volume", arr)
+            assert arr[0] == 0.0, (
+                f"soil_water~storage_volume read {arr[0]}, not 0.0 -- SoilMoistDiff may have been "
+                "wired up since this test was written; update this test's expectation and "
+                "docs/COUPLING_VARS_LEDGER.md's dead-code note together, don't just relax this "
+                "assertion"
+            )
+        finally:
+            m.finalize()
 
 
 class TestPerCellRainfallRunoff:
