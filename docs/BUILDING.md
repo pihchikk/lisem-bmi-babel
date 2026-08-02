@@ -82,3 +82,21 @@ pytest -q bmi_lisem/tests
 
 Without `LISEM_TEST_RUNFILE` (and without a bundled tiny dataset), data-dependent
 tests are skipped.
+
+**On this development machine**, the standard runfile is
+`/home/claude/lisem-work/VNIIMZ_20m/res_test/run_test.run` (real 20m catchment,
+paths pre-corrected for this host — the dataset's other `.run` files carry
+absolute paths from different environments and won't resolve here). Setting it
+unblocks all 13 data-dependent tests with **no `pcraster` install** — see
+`scripts/run_local_tests.sh`, which wires this path plus the
+`LD_LIBRARY_PATH`/de-shadowing steps above into one command, and README.rst's
+"Input data" section for why none of these tests actually need `pcraster`
+(the two that read `.map` output already do it via `osgeo.gdal`; `pcraster`
+is only ever touched by the optional, currently-broken `tests/data/tiny/`
+synthetic-scaffold generator, which this project doesn't rely on).
+
+A full run against `VNIIMZ_20m` takes about 4 minutes per event (360
+`update()` calls over the full 6,821-cell grid — CPU cost is modest, most of
+the wall time is the engine's own per-step console logging). Seven of the 13
+tests each run a full event, so the suite takes roughly 25-30 minutes end to
+end.

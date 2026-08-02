@@ -103,11 +103,24 @@ jobs:
           python -m pip install meson-python meson ninja cython numpy wheel pytest
           python -m pip install --no-build-isolation .
 
-      - name: Generate tiny synthetic catchment (best-effort; needs pcraster)
+      - name: Generate tiny synthetic catchment (best-effort)
         continue-on-error: true
         run: |
           set -e
-          python -m pip install pcraster || { echo "pcraster unavailable; data tests will skip"; exit 0; }
+          # pcraster has no PyPI wheel under any name and there's no conda here,
+          # so this always falls through to "data tests will skip" as written --
+          # that's expected, not a bug in this step. It is NOT the reason the
+          # data-dependent tests generally skip in CI: none of them need
+          # pcraster (see README.rst's "Input data" section -- the two that
+          # verify against LISEM's own .map output already use osgeo.gdal).
+          # This step exists only for the *optional* tests/data/tiny/ scaffold,
+          # which is currently a dead end regardless of pcraster: tiny.run uses
+          # the GUI's human-readable keys (e.g. "Gradient=grad.map") while the
+          # engine's runfile parser looks up entries by internal variable name
+          # (e.g. "grad=grad.map") -- see docs/BUILDING.md. Left as best-effort
+          # rather than removed since fixing tiny.run's key format would make
+          # this step meaningful again without touching pcraster at all.
+          python -m pip install pcraster || { echo "pcraster unavailable (expected -- no PyPI wheel, no conda here); data tests will skip"; exit 0; }
           python bmi_lisem/tests/data/tiny/make_tiny.py
 
       - name: Run pytest (against the installed wheel, not the source tree)

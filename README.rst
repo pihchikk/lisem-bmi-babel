@@ -187,6 +187,42 @@ variable ``LISEM_TEST_RUNFILE`` to an absolute runfile path to exercise the test
 suite against real data; without it (and without a bundled tiny dataset) the
 data-dependent tests are skipped.
 
+**Standard local invocation, this development environment:**
+
+.. code:: bash
+
+  export LISEM_TEST_RUNFILE=/home/claude/lisem-work/VNIIMZ_20m/res_test/run_test.run
+
+This points at ``VNIIMZ_20m``, a real 20m-resolution catchment (204×89 grid,
+6,821 in-catchment cells) kept outside this repo. ``res_test/run_test.run`` is
+the one runfile in that dataset with paths already corrected for this machine
+(the others use absolute paths from other environments — WSL, a Jupyter
+container — and won't resolve here).
+
+Setting this unblocks all 13 currently-skipping tests in
+``bmi_lisem/tests/`` (``test_standard_names.py`` and
+``test_coupling_vars.py``). **None of them need ``pcraster``** — confirmed by
+reading every test file, not assumed:
+
+* Metadata and post-event-value tests only call the BMI array interface
+  (``get_value``, ``get_output_var_names``, etc.) — no map I/O of any kind.
+* The two tests that do cross-check LISEM's own written ``.map`` output
+  (``test_rainfall_amount_matches_own_rainfall_map``,
+  ``test_runoff_amount_matches_own_runoff_map``) already read it via
+  ``osgeo.gdal`` (``_read_pcraster()`` in ``test_coupling_vars.py`` — the name
+  is legacy, the implementation is pure GDAL, worked around a pip-wheel gap
+  with raw ``ReadRaster()`` bytes instead of ``ReadAsArray()``).
+* ``pcraster`` is only ever imported by ``make_tiny.py``, to generate the
+  optional synthetic ``tests/data/tiny/`` scaffold — an alternative to
+  ``LISEM_TEST_RUNFILE`` for environments with no real dataset available (e.g.
+  a from-scratch CI runner). It isn't installable from PyPI under any name
+  here, and there's no conda in this environment either, but that path isn't
+  needed at all once a real runfile is set. (It's also a dead end as shipped:
+  ``tiny.run`` uses the GUI's human-readable keys, e.g. ``Gradient=grad.map``,
+  while the engine's runfile parser looks up entries by internal variable
+  name, e.g. ``grad=grad.map`` — the same class of mismatch ``VNIIMZ_20m``'s
+  own uncorrected runfiles originally hit; see ``docs/BUILDING.md``.)
+
 Building headless / development
 ==============================
 
