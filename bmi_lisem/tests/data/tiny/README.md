@@ -1,25 +1,33 @@
 # Tiny synthetic catchment (CI test data)
 
 A 10×10 synthetic OpenLISEM catchment used to exercise the BMI in CI without a
-real dataset. Two runfiles share this map directory:
+real dataset. Three runfiles share this map directory:
 
-- `tiny.run` — single-layer soil (`Nr input layers=1`), ~1-2s per run.
-- `tiny3.run` — three-layer soil (`Nr input layers=3`), same catchment,
-  built specifically to demonstrate `soil_water_actual_layer-3` /
+- `tiny.run` — single-layer Green & Ampt (`Nr input layers=1`), ~1-2s per run.
+- `tiny3.run` — three-layer Green & Ampt (`Nr input layers=3`), same
+  catchment, built specifically to demonstrate `soil_water_actual_layer-3` /
   `SwitchThreeLayer` actually work, not just argue it from source. See
   "Three-layer fixture" below.
+- `tiny_swatre.run` — SWATRE (`Infil Method=1`) instead of Green & Ampt, same
+  catchment. Built to exercise SWATRE's genuinely different infiltration
+  code path; found and fixed a real crash along the way. See "SWATRE
+  fixture" below.
 
 ## What is committed
 
 - `make_tiny.py` — generator that writes the PCRaster `.map` inputs (needs
   `pcraster`, which is not installable in this dev environment -- see
   "Regenerating the maps" below).
-- `tiny.run`, `tiny3.run` — runfiles (absolute, host-specific paths; see each
-  file's own header comment).
+- `tiny.run`, `tiny3.run`, `tiny_swatre.run` — runfiles (absolute,
+  host-specific paths; see each file's own header comment).
 - `rain.txt` — a short rainfall table (note: LISEM's rainfall-file format is
   `# comment` / column-count / literal `timestep` / station-count / then
   `DDD:HHMM value` rows -- not raw minutes-since-start, which is what an
   earlier draft of this file used and which fails to parse).
+- `profile.inp`, `loam.tbl` — SWATRE's profile definition and soil
+  moisture-retention/conductivity lookup table. Plain text, committed
+  directly (not gitignored like the PCRaster `.map` files). See "SWATRE
+  fixture" for what's in them and why the numbers are what they are.
 
 The `.map` binaries are **not committed** (`.gitignore` excludes `*.map` and
 `*.csv`) — generate them with `make_tiny.py`, or see "Regenerating the maps"
@@ -52,12 +60,14 @@ Both runfiles have been confirmed end-to-end against the real built engine:
   it's a genuine `PASSED`, not an `XPASS`), and `test_actual_theta_differs_from_initial`
   shows a modest, physically plausible wetting response (0.200 -> 0.220),
   not a trivial jump to saturation.
-- `tiny3.run`: 25 passed / 1 failed. The one failure
-  (`test_inactive_variable_raises_cleanly`) is the test's own hardcoded
-  assumption that `soil_water_actual_layer-3` is always inactive -- true for
-  every other fixture in this project, false here by design. Not a defect;
-  pick a different genuinely-inactive probe variable for this fixture, or
-  parametrize the test, if this needs to pass cleanly too.
+- `tiny3.run`: 25 passed / 1 skipped. (`test_inactive_variable_raises_cleanly`
+  now picks whichever canonical variable the current fixture doesn't
+  advertise rather than hardcoding `soil_water_actual_layer-3` -- since this
+  fixture advertises everything, it honestly skips instead of failing on its
+  own broken precondition.)
+- `tiny_swatre.run`: 24 passed / 2 skipped (same own-map skips as `tiny.run`).
+  See "SWATRE fixture" below -- getting here required fixing a real crash,
+  not just authoring input data.
 
 This was a real, non-trivial reconciliation, not just a path fix: the
 scaffold's human-readable key names (e.g. `Gradient=`) didn't match what the
@@ -121,6 +131,67 @@ decrease with depth, antecedent moisture increases with depth) -- picked to
 exercise the code path, not to model a real place. See `make_tiny.py` for
 the exact numbers.
 
+## SWATRE fixture (`tiny_swatre.run`)
+
+Built to exercise SWATRE (`Infil Method=1`), a genuinely different
+infiltration solver from Green & Ampt -- SWATRE integrates a
+Richards-equation-like N-node soil column per cell (`swatre/swatstep.cpp`)
+using a profile definition (`profile.inp`) and a soil
+moisture-retention/conductivity lookup table (`loam.tbl`), rather than
+approximating a wetting front.
+
+**This surfaced a real, universally-reproducible SIGSEGV, not a data
+problem.** `BmiLisem::Initialize()`/`Update()`/`UpdateUntil()` called
+`model->avgTheta()` unconditionally; `avgTheta()` dereferences
+`SoilDepth1->Drc` unconditionally too, but `SoilDepth1` is only ever
+allocated inside `lisDataInit.cpp`'s `if (InfilMethod != INFIL_SWATRE)`
+block, so it stayed null under SWATRE and `avgTheta()` null-derefed on its
+very first call, inside `Initialize()` -- before any fixture-specific data
+even mattered. Confirmed via `gdb` (crash in `TWorld::avgTheta()`), and
+confirmed this was a wrapper regression rather than an upstream bug: native
+LISEM's own `ReportMaps()` (`lisReportmaps.cpp`) already guards both its
+`avgTheta()` call sites with `if (SwitchInfiltration && InfilMethod !=
+INFIL_SWATRE)`. `BmiLisem.cpp`'s three call sites never picked up that
+guard. Fixed by mirroring it exactly.
+
+**Fixing the crash surfaced a second, adjacent finding:** `ThetaI2a`
+(`soil_water_actual_layer-2`) was allocated *unconditionally* in
+`lisDataInit.cpp`, unlike `ThetaI3a` (correctly allocated only inside `if
+(SwitchThreeLayer)`) -- so it was always advertised via the BMI registry
+even when nothing would ever write to it: `avgTheta()`'s own layer-2 update
+is itself gated on `SwitchTwoLayer`. This wasn't SWATRE-specific -- plain
+`tiny.run` (1-layer Green & Ampt) hit the exact same thing, reading exactly
+`0.0` for the entire run. Fixed by mirroring `ThetaI3a`'s pattern: `ThetaI2a`
+is now allocated only inside `if (SwitchTwoLayer)`. Verified every other
+usage site in the engine (`lisReportmaps.cpp`, `lisTotalsMB.cpp`,
+`lisDisplayMaps.cpp`, `lisSoilmoisture.cpp`) already checked `SwitchTwoLayer`
+before touching `ThetaI2a` -- this was a pure allocation-gating gap, not a
+missing-guard problem elsewhere. Net effect: `tiny.run` now advertises 16
+variables instead of 17 (`soil_water_actual_layer-2` correctly dropped);
+`res_test`/`results_test`/`tiny3.run` (all genuinely 2-or-3-layer) are
+unaffected. See `COUPLING_VARS_LEDGER.md`'s SWATRE section for the full
+writeup.
+
+**What's genuinely live under SWATRE vs. what's genuinely absent, confirmed
+not assumed:**
+- `soil_water_actual_layer-1` (`ThetaI1a`) -- live. SWATRE has its own
+  independent per-timestep update (`InfilSwatre()`,
+  `swatre/lisInfilSwatre.cpp`), unrelated to `avgTheta()` entirely. Observed
+  evolving genuinely (0.200 → 0.254 over the event).
+- `soil_layer-depth~layer-1` and `soil_water_actual` (the `ThetaI1` alias)
+  -- genuinely absent, not a bug. Both are only ever read inside the same
+  Green & Ampt-only block as `SoilDepth1`.
+
+**Also synthetic, not measured**, same disclosure as the layer-2/3 maps:
+`loam.tbl`'s theta/suction/conductivity rows are a hand-picked,
+physically-ordered retention/conductivity curve (theta and hydraulic
+conductivity both increasing as suction approaches zero, the shape a real
+Brooks-Corey or van Genuchten fit would have) -- not fit to any real soil
+sample. `profile.inp` defines 3 nodes at 10/30/60cm depth, one profile, one
+horizon. `Use one matrix potential=1` initializes every node to a single
+user-given matric potential rather than needing a series of `inithead.NNN`
+initial-condition maps.
+
 ## Regenerating the maps
 
 `pcraster` is not installable in this dev environment (no PyPI wheel, no
@@ -135,4 +206,9 @@ pip install pcraster
 python bmi_lisem/tests/data/tiny/make_tiny.py
 LISEM_TEST_RUNFILE="$(pwd)/bmi_lisem/tests/data/tiny/tiny.run" pytest -q bmi_lisem/tests
 LISEM_TEST_RUNFILE="$(pwd)/bmi_lisem/tests/data/tiny/tiny3.run" pytest -q bmi_lisem/tests
+LISEM_TEST_RUNFILE="$(pwd)/bmi_lisem/tests/data/tiny/tiny_swatre.run" pytest -q bmi_lisem/tests
 ```
+
+`profile.inp`/`loam.tbl` are plain text, already committed, and don't need
+`pcraster` regeneration -- only `tiny_swatre.run`'s underlying catchment maps
+(`dem.map`, `ldd.map`, etc., shared with `tiny.run`/`tiny3.run`) do.

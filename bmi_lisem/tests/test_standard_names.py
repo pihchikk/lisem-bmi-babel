@@ -158,6 +158,18 @@ def test_erosion_scaled_by_canonical_name():
         m.finalize()
 
 
+def _runfile_infil_method(runfile_path):
+    """Reads "Infil Method" directly from the runfile (list-directed .run format), mirroring
+    test_coupling_vars.py's _parse_runfile_setting -- duplicated rather than imported to keep
+    this file's only cross-module dependency the shared _runfile helper (tests run from a copy
+    outside the repo; see docs/BUILDING.md)."""
+    with open(runfile_path, encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if line.strip().startswith("Infil Method="):
+                return line.split("=", 1)[1].strip()
+    return None
+
+
 @needs_runfile
 def test_coupling_names_present():
     """Coupling-critical canonical names shared with AquaCrop are advertised."""
@@ -167,6 +179,11 @@ def test_coupling_names_present():
         # layer-2/-3 are optional (depend on runfile layer count)
         required = {"soil_water_actual", "plant_cover~projective",
                     "soil_water_actual_layer-1"}
+        # soil_water_actual (ThetaI1) is only ever ReadMap()'d inside lisDataInit.cpp's
+        # "InfilMethod != INFIL_SWATRE" block -- genuinely absent under SWATRE (Infil
+        # Method=1), confirmed against tiny_swatre.run, not assumed.
+        if _runfile_infil_method(RUNFILE) == "1":
+            required.discard("soil_water_actual")
         for name in required:
             assert name in advertised, f"coupling name {name!r} not advertised"
     finally:

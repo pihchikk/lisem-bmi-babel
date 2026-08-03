@@ -111,13 +111,29 @@ class TestMetadata:
     # advertised as active. See TMmapVariables.h/model.h.)
     OPTIONAL_LAYER_SUFFIXES = ("layer-2", "layer-3")
 
+    # Under SWATRE (Infil Method=1), lisDataInit.cpp's entire Green & Ampt
+    # layer-map-reading block is skipped (guarded by "InfilMethod !=
+    # INFIL_SWATRE"), so soil_layer-depth~layer-1 (SoilDepth1, only ever
+    # ReadMap()'d inside that block) is genuinely never allocated -- confirmed
+    # directly against tiny_swatre.run, not assumed. Detected from the runfile
+    # itself rather than hardcoded to a fixture name, same reasoning as
+    # OPTIONAL_LAYER_SUFFIXES above.
+    SWATRE_ONLY_OPTIONAL = ("soil_layer-depth~layer-1",)
+
+    @staticmethod
+    def _is_swatre(runfile_path):
+        return _parse_runfile_setting(runfile_path, "Infil Method") == "1"
+
     @needs_runfile
     def test_coupling_vars_in_output_list(self):
         m = _make_model()
         try:
             out_vars = m.get_output_var_names()
+            is_swatre = self._is_swatre(RUNFILE)
             for name in MAP_OUTPUTS_COUPLING + SCALAR_OUTPUTS:
                 if name.endswith(self.OPTIONAL_LAYER_SUFFIXES):
+                    continue
+                if is_swatre and name in self.SWATRE_ONLY_OPTIONAL:
                     continue
                 assert name in out_vars, f"{name!r} missing from output var names"
         finally:
@@ -364,6 +380,11 @@ class TestPostEventValues:
             out_vars = set(m.get_output_var_names())
             if "soil_water_actual_layer-1" not in out_vars:
                 pytest.skip("soil_water_actual_layer-1 not registered")
+            # soil_water_actual (ThetaI1, the baseline this test compares against) is only
+            # ever ReadMap()'d inside lisDataInit.cpp's "InfilMethod != INFIL_SWATRE" block --
+            # genuinely absent under SWATRE, confirmed against tiny_swatre.run.
+            if "soil_water_actual" not in out_vars:
+                pytest.skip("soil_water_actual not registered (SWATRE?)")
 
             theta0_flat = _read(m, "soil_water_actual")
 

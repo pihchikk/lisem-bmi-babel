@@ -116,6 +116,59 @@ equivalent to reading the initial condition map directly, not as a live
 state variable — there is currently no LISEM-exposed way to see layer 3's
 actual moisture evolution through this BMI.
 
+#### SWATRE (`Infil Method=1`): a real crash, fixed, and what it changes for the soil-moisture variables
+
+`BmiLisem::Initialize()`/`Update()`/`UpdateUntil()` called `model->avgTheta()`
+unconditionally. `avgTheta()` (`hydro/lisPercolation.cpp`) dereferences
+`SoilDepth1->Drc` unconditionally too, but `SoilDepth1` is only ever
+allocated inside `lisDataInit.cpp`'s `if (InfilMethod != INFIL_SWATRE)`
+block — so under SWATRE it stayed `nullptr` (deterministically, post the
+`a4965c4` registry fix) and `avgTheta()` null-derefed on its very first call,
+inside `Initialize()`, before any dataset-specific state even mattered.
+100% reproducible on any SWATRE-configured runfile, confirmed via `gdb`.
+
+This was a wrapper regression, not an upstream bug: native LISEM's own
+`ReportMaps()` (`lisReportmaps.cpp`) already guards both its own `avgTheta()`
+call sites with `if (SwitchInfiltration && InfilMethod != INFIL_SWATRE)`.
+`BmiLisem.cpp`'s three call sites never picked up that guard. Fixed by
+mirroring it exactly — not a new policy, the one the engine already uses.
+
+**What this means for the soil-moisture variables under SWATRE:**
+
+- `soil_water_actual_layer-1` (`ThetaI1a`) — genuinely live, unaffected by
+  either the bug or the fix. SWATRE has its own independent, per-timestep
+  update path: `InfilSwatre()` (`swatre/lisInfilSwatre.cpp`, called every
+  step from `lisModel.cpp` when `InfilMethod == INFIL_SWATRE`) sets
+  `ThetaI1a->Drc = theta` from SWATRE's own root-zone moisture calculation.
+  Confirmed empirically on `tiny_swatre.run`: evolves genuinely (0.200 →
+  0.254 over the event).
+- `soil_layer-depth~layer-1` and `soil_water_actual` (`SoilDepth1`/`ThetaI1`)
+  — genuinely absent under SWATRE, not a bug: both are only ever read inside
+  the same Green & Ampt-only block. The registry correctly excludes them
+  (their pointers stay null); `get_output_var_names()` will not advertise
+  either under SWATRE.
+- `soil_water_actual_layer-2` (`ThetaI2a`) — was **always advertised but
+  permanently `0.0`**, and not only under SWATRE. Tracing its allocation
+  site showed `ThetaI2a = NewMap(0)` happened unconditionally, regardless of
+  layer count or infiltration method — unlike `ThetaI3a`, which was already
+  correctly allocated only inside `if (SwitchThreeLayer)`. Since
+  `avgTheta()`'s own layer-2 update is itself gated on `SwitchTwoLayer`, any
+  configuration where that's false (1-layer Green & Ampt — `tiny.run` did
+  this too, unrelated to SWATRE — or SWATRE, where `SwitchTwoLayer` is never
+  set at all) left `ThetaI2a` advertised but stuck at its zero-initialized
+  default for the entire run. Fixed the same way as the crash: mirror the
+  pattern the engine already uses correctly for `ThetaI3a`. `ThetaI2a` is now
+  allocated only inside `if (SwitchTwoLayer)`, so the registry correctly
+  excludes it whenever nothing will ever write to it. This is the third
+  instance of "registry advertises what nothing fills" found in this
+  project (after the original heap-garbage registry bug and the frozen
+  layer-3 echo above) — but the only one that was a pure allocation-gating
+  gap with zero other call sites at risk: every other place in the engine
+  that touches `ThetaI2a` (`lisReportmaps.cpp`, `lisTotalsMB.cpp`,
+  `lisDisplayMaps.cpp`, `lisSoilmoisture.cpp`) already checked
+  `SwitchTwoLayer` (or an equivalent) before touching it — confirmed via a
+  full grep of every usage site, not assumed.
+
 ### Notes on erosion scaling
 
 `TotalSoillossMap` stores cumulative soil loss in **kg per cell**.
