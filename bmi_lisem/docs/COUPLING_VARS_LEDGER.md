@@ -44,6 +44,41 @@ calls `model->avgTheta()` after every `model->Update()`, and
 `BmiLisem::Initialize()` calls it once after `model->Initialize()` so that
 values are valid at t₀.
 
+#### `soil_water_actual_layer-2` saturates and freezes once the wetting front passes it
+
+`avgTheta()`'s formula for layer 2 (`hydro/lisPercolation.cpp`) is a coarse
+wetting-front-*position* indicator, not a live mass-balance-tracked state:
+
+```cpp
+if (Lw_ > SoilDep1 && Lw_ < SoilDep2 - 1e-3) {
+    double f = (Lw_-SoilDep1)/(SoilDep2-SoilDep1);
+    ThetaI2a->Drc = f * ThetaS2->Drc + (1-f) * ThetaI2->Drc;
+}
+if (Lw_ > SoilDep2 - 1e-3)
+    ThetaI2a->Drc = ThetaS2->Drc;
+```
+
+Once the wetting front `Lw` passes layer 2's bottom depth
+(`Lw_ > SoilDep2 - 1e-3`), `ThetaI2a` is pinned to `ThetaS2` (saturation) for
+the rest of the run — **it stops reflecting any further dynamics** (drainage,
+redistribution, deep percolation) once that threshold is crossed. Confirmed
+directly on VNIIMZ_20m: layer 2 rose from ~0.35 to ~0.655 by the first quarter
+of the event, then read *bit-identical* at the 25/50/75/100% checkpoints,
+matching each probed cell's own `ThetaS2` map value almost exactly (cell
+12364: plateau 0.65494 vs `ThetaS2` 0.65645; cell 13986: plateau 0.65920 vs
+`ThetaS2` 0.66056) — while layer 1 kept declining smoothly and substantially
+over the same interval. Water isn't vanishing; the diagnostic simply can't see
+past "the front has arrived."
+
+**Implication for coupling partners:** a caller reading
+`soil_water_actual_layer-2` as an evolving moisture signal will see a
+constant once this threshold is crossed on a given cell, not ongoing
+dynamics — the variable's real semantics are closer to "has this layer been
+reached by the wetting front" than "current moisture content of this layer."
+Don't build logic downstream that assumes it keeps changing after the event's
+early stages; check `soil_layer-depth~layer-2` / `Lw` position if the actual
+evolving state matters.
+
 ### Notes on erosion scaling
 
 `TotalSoillossMap` stores cumulative soil loss in **kg per cell**.
