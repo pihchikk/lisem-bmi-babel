@@ -871,16 +871,16 @@ public:
     //material that is available for detachment
     QList<cTMap *> StorageDep_D;
     QList<cTMap *> Storage_D;
-    cTMap *Storage;
-    cTMap *StorageDep;
-    cTMap *SedimentMixingDepth;
-    cTMap *maxDetachment;
+    cTMap *Storage = nullptr;
+    cTMap *StorageDep = nullptr;
+    cTMap *SedimentMixingDepth = nullptr;
+    cTMap *maxDetachment = nullptr;
 
     //QList<cTMap *> RStorageDep_D;
     //QList<cTMap *> RStorage_D;
-    cTMap *RStorage;
-    cTMap *RStorageDep;
-    cTMap *RSedimentMixingDepth;
+    cTMap *RStorage = nullptr;
+    cTMap *RStorageDep = nullptr;
+    cTMap *RSedimentMixingDepth = nullptr;
 
     //keep track of any dissolved substances that need to be advected by the kinematic wave
     //not used!!!
@@ -1166,10 +1166,10 @@ public:
     void InitNewSoilProfile();
     double swatreDT;
     bool initSwatreStructure;
-    SOIL_MODEL *SwatreSoilModel;
-    SOIL_MODEL *SwatreSoilModelCrust;
-    SOIL_MODEL *SwatreSoilModelCompact;
-    SOIL_MODEL *SwatreSoilModelGrass;
+    SOIL_MODEL *SwatreSoilModel = nullptr;
+    SOIL_MODEL *SwatreSoilModelCrust = nullptr;
+    SOIL_MODEL *SwatreSoilModelCompact = nullptr;
+    SOIL_MODEL *SwatreSoilModelGrass = nullptr;
     PROFILE **profileList = nullptr;
     HORIZON **horizonList = nullptr;
     ZONE *zone = nullptr;

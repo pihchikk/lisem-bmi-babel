@@ -27,420 +27,420 @@
 \brief List of maps with descriptions and units. Linked directly in the model class.
 */
 
-QVector <cTMap*> *inith; // swatre matrix potential nodes
+QVector <cTMap*> *inith = nullptr; // swatre matrix potential nodes
 
 cTMap
-*DEM,                        //!< DEM [m]
-*MBm,
-*ShadeBW,                      //!< Shaded relief for display [0-1]
-*DX,                         //!< cell length divided by cosine slope (so corrected for terrain gradient) [m]
-*CellArea,                   //!< cell area = DX * _dx [m^2]
-*Grad,                       //!< sine of the DEM gradient [-]
-*LDD,                        //!< local drain direction map [-]
-*Outlet,                     //!< main outlet of the catchment, value 5 in LDD map [-]
-*PointMap,                   //!< map with output points, values > 0 [-]
-*FlowBoundary,               //!< map with open boundary fior diffusive runoff (1) or closed boundary (0)
-*WaterSheds,                 //!< map with numbered siubcatchments, must be 1,2,3 ... n
-*QBoundFlow,
-*DomainEdge,
+*DEM = nullptr,                        //!< DEM [m]
+*MBm = nullptr,
+*ShadeBW = nullptr,                      //!< Shaded relief for display [0-1]
+*DX = nullptr,                         //!< cell length divided by cosine slope (so corrected for terrain gradient) [m]
+*CellArea = nullptr,                   //!< cell area = DX * _dx [m^2]
+*Grad = nullptr,                       //!< sine of the DEM gradient [-]
+*LDD = nullptr,                        //!< local drain direction map [-]
+*Outlet = nullptr,                     //!< main outlet of the catchment, value 5 in LDD map [-]
+*PointMap = nullptr,                   //!< map with output points, values > 0 [-]
+*FlowBoundary = nullptr,               //!< map with open boundary fior diffusive runoff (1) or closed boundary (0)
+*WaterSheds = nullptr,                 //!< map with numbered siubcatchments, must be 1,2,3 ... n
+*QBoundFlow = nullptr,
+*DomainEdge = nullptr,
 
-*IDRainPoints,                   //!< rainfall zone map (clasified map, numers corrspond to raingaug number in rainfall file) [-]
-*RainZone,                   //!< rainfall zone map (clasified map, numers corrspond to raingaug number in rainfall file) [-]
-*ETZone,                     //!< rainfall zone map (clasified map, numers corrspond to raingaug number in rainfall file) [-]
-*Rain,                       //!< map with rain from tis time intervall [m]
-*Rainc,                      //!< map with rain from tis time intervall, spread over the surface (corrected or slope) [m]
-*RainCumInt,                 //!< cumulative rainfall, as spreadoutover slope [m], needed for interception
-*RainCumCrust,               //!< cumulative rainfall, as spreadoutover slope [m], needed for crusting
-*RainCumFlat,                //!< cumulative rainfall [m]
-*RainNet,                    //!< net rainfall after interception [m]
-*LeafDrain,                  //!< drainge from canopy, storage overflow [m]
-*CStor,                      //!< actual canopy storage [m]
-*Interc,                     //!< actual canopy storage volume, corrected for surfaces without vegetation (like roads) [m^3]
-*IntercETa,                     //!< actual canopy storage volume, corrected for surfaces without vegetation (like roads) [m^3]
-*LCStor,                     //!< actual Litter storage [m]
-*LInterc,                    //!< actual Litter storage volume, corrected for surfaces without vegetation (like roads) [m^3]
-*DStor,                      //!< actual drum storage of rainwater [m^3]
-*HStor,                      //!< actual roof storage of rainwater [m]
-*IntercHouse,                //!< actual roof storage volume [m^3]
-*HouseCover,                 //!< fraction cover of house in pixel [-]
-*RoofStore,                  //!< Max storage of roof in [mm]
-*DrumStore,                  //!< Max storage of rainwter drums [m^3]
-*InterceptionmmCum,
-*ETa,
-*ETaCum,
-*ETp,
-*ETpCum,
+*IDRainPoints = nullptr,                   //!< rainfall zone map (clasified map, numers corrspond to raingaug number in rainfall file) [-]
+*RainZone = nullptr,                   //!< rainfall zone map (clasified map, numers corrspond to raingaug number in rainfall file) [-]
+*ETZone = nullptr,                     //!< rainfall zone map (clasified map, numers corrspond to raingaug number in rainfall file) [-]
+*Rain = nullptr,                       //!< map with rain from tis time intervall [m]
+*Rainc = nullptr,                      //!< map with rain from tis time intervall, spread over the surface (corrected or slope) [m]
+*RainCumInt = nullptr,                 //!< cumulative rainfall, as spreadoutover slope [m], needed for interception
+*RainCumCrust = nullptr,               //!< cumulative rainfall, as spreadoutover slope [m], needed for crusting
+*RainCumFlat = nullptr,                //!< cumulative rainfall [m]
+*RainNet = nullptr,                    //!< net rainfall after interception [m]
+*LeafDrain = nullptr,                  //!< drainge from canopy, storage overflow [m]
+*CStor = nullptr,                      //!< actual canopy storage [m]
+*Interc = nullptr,                     //!< actual canopy storage volume, corrected for surfaces without vegetation (like roads) [m^3]
+*IntercETa = nullptr,                     //!< actual canopy storage volume, corrected for surfaces without vegetation (like roads) [m^3]
+*LCStor = nullptr,                     //!< actual Litter storage [m]
+*LInterc = nullptr,                    //!< actual Litter storage volume, corrected for surfaces without vegetation (like roads) [m^3]
+*DStor = nullptr,                      //!< actual drum storage of rainwater [m^3]
+*HStor = nullptr,                      //!< actual roof storage of rainwater [m]
+*IntercHouse = nullptr,                //!< actual roof storage volume [m^3]
+*HouseCover = nullptr,                 //!< fraction cover of house in pixel [-]
+*RoofStore = nullptr,                  //!< Max storage of roof in [mm]
+*DrumStore = nullptr,                  //!< Max storage of rainwter drums [m^3]
+*InterceptionmmCum = nullptr,
+*ETa = nullptr,
+*ETaCum = nullptr,
+*ETp = nullptr,
+*ETpCum = nullptr,
 
-*SnowmeltZone,               //!< snowmelt zone map, values corrspond to snowmelt gauge numbers [-]
-*Snowcover,                  //!< snowmelt cover map, value 1.0 if there is snowcover, 0 without [-]
-*Snowmelt,                   //!< snowmelt depth in water equivalent [m]
-*Snowmeltc,                  //!< snowmelt depth in water equivalent, corrected for DEM gradient [m]
-*SnowmeltCum,                //!< cumulative showmelt depth [m]
+*SnowmeltZone = nullptr,               //!< snowmelt zone map, values corrspond to snowmelt gauge numbers [-]
+*Snowcover = nullptr,                  //!< snowmelt cover map, value 1.0 if there is snowcover, 0 without [-]
+*Snowmelt = nullptr,                   //!< snowmelt depth in water equivalent [m]
+*Snowmeltc = nullptr,                  //!< snowmelt depth in water equivalent, corrected for DEM gradient [m]
+*SnowmeltCum = nullptr,                //!< cumulative showmelt depth [m]
 
-*WH,                         //!< water height on the surface [m]
+*WH = nullptr,                         //!< water height on the surface [m]
 //*WHold,                      //!< water height on the surface before infiltration [m]
 //*WHnew,                      //!< water height on the surface before infiltration [m]
-*WHrunoff,                   //!< water height available for runoff [m]
-*WHmax,                      //!< max runoff wh in m for reporting
-*WHstore,                    //!< water heigth stored in micro depressions [m]
-*MicroStoreVol,
-*WaterVolall,                //!< water volume total (incl surface storage) [m^3]
-*WaterVolin,                 //!< water volume total before kin wave (after tochannel) [m^3]
+*WHrunoff = nullptr,                   //!< water height available for runoff [m]
+*WHmax = nullptr,                      //!< max runoff wh in m for reporting
+*WHstore = nullptr,                    //!< water heigth stored in micro depressions [m]
+*MicroStoreVol = nullptr,
+*WaterVolall = nullptr,                //!< water volume total (incl surface storage) [m^3]
+*WaterVolin = nullptr,                 //!< water volume total before kin wave (after tochannel) [m^3]
 //*flowmask,
 //*WaterVolRunoff,                //!< water volume for runoff [m^3]
 
-*FlowWidth,                  //!< width of the flow overland, based on ponded area/roughness, +roads etc [m]
-*V,                          //!< velocity of overland flow [m/s]
-*Alpha,                      //!< alpha in A = alphaQ^b
-*Q,                          //!< discharge of overland flow before kin wave [m^3/s]
-*DischargeUserPoints,
-*QuserIn,
-*WHbound,
-*WHboundarea,
-*WHboundRain,
-*Qbase,
-*GWVol,
-*GWWH,
-*GWU,
-*GWV,
-*GWN,
-*GWWHmax,
-*GWdeep,
-*GWrecharge,
-*GWout,
-*GWz,
-*GWgrad,
-*Qn,                         //!< new discharge of overland flow after kin wave [m^3/s]
-*Qdiag,
-*VH,
-*QinKW,
-*QKW,
-*Qm3total,
-*Qm3max,
-*FHI,
-*Qoutput,                    //!< new discharge for output purposes, sum of overland flow and channel, converted [l/s]
-*Qs,                         //!< sediment discharge before kin wave [kg/s]
-*Qsn,                        //!< new sediment discharge after kin wave [kg/s]
-*Qsoutput,                   //!< sediment outflow for screen/file output, sum of overland flow and channel [kg/s]
+*FlowWidth = nullptr,                  //!< width of the flow overland, based on ponded area/roughness, +roads etc [m]
+*V = nullptr,                          //!< velocity of overland flow [m/s]
+*Alpha = nullptr,                      //!< alpha in A = alphaQ^b
+*Q = nullptr,                          //!< discharge of overland flow before kin wave [m^3/s]
+*DischargeUserPoints = nullptr,
+*QuserIn = nullptr,
+*WHbound = nullptr,
+*WHboundarea = nullptr,
+*WHboundRain = nullptr,
+*Qbase = nullptr,
+*GWVol = nullptr,
+*GWWH = nullptr,
+*GWU = nullptr,
+*GWV = nullptr,
+*GWN = nullptr,
+*GWWHmax = nullptr,
+*GWdeep = nullptr,
+*GWrecharge = nullptr,
+*GWout = nullptr,
+*GWz = nullptr,
+*GWgrad = nullptr,
+*Qn = nullptr,                         //!< new discharge of overland flow after kin wave [m^3/s]
+*Qdiag = nullptr,
+*VH = nullptr,
+*QinKW = nullptr,
+*QKW = nullptr,
+*Qm3total = nullptr,
+*Qm3max = nullptr,
+*FHI = nullptr,
+*Qoutput = nullptr,                    //!< new discharge for output purposes, sum of overland flow and channel, converted [l/s]
+*Qs = nullptr,                         //!< sediment discharge before kin wave [kg/s]
+*Qsn = nullptr,                        //!< new sediment discharge after kin wave [kg/s]
+*Qsoutput = nullptr,                   //!< sediment outflow for screen/file output, sum of overland flow and channel [kg/s]
 //*q,                          //!< infiltration surplus going in kin wave (<= 0) [m2/s]
-*R,                          //!< hydraulic radius overland flow [m]
-*N,                          //!< Manning's n
-*Norg,                          //!< Manning's n
-*RR,                         //!< Random roughness, locally converted to m [cm]
-*MDS,                        //!< Maximum depression storage [m]
+*R = nullptr,                          //!< hydraulic radius overland flow [m]
+*N = nullptr,                          //!< Manning's n
+*Norg = nullptr,                          //!< Manning's n
+*RR = nullptr,                         //!< Random roughness, locally converted to m [cm]
+*MDS = nullptr,                        //!< Maximum depression storage [m]
 //*fpa,                        //!< fraction ponded area [-]
-*SoilWidthDX,                //!< width of soil surface, excluding roads and channels [m]
-*RoadWidthDX,                //!< width of tarred roads [m]
-*RoadWidthHSDX,
-*StoneFraction,              //!< fraction of stones on the surface, affects splash [-]
-*CompactFraction,            //!< fraction compacted at the surface, uses ksat compact [-]
-*CrustFraction,              //!< fraction crusted at the surface, uses ksat crust [-]
-*CrustFraction0,              //!< fraction crusted at the surface, uses ksat crust [-]
+*SoilWidthDX = nullptr,                //!< width of soil surface, excluding roads and channels [m]
+*RoadWidthDX = nullptr,                //!< width of tarred roads [m]
+*RoadWidthHSDX = nullptr,
+*StoneFraction = nullptr,              //!< fraction of stones on the surface, affects splash [-]
+*CompactFraction = nullptr,            //!< fraction compacted at the surface, uses ksat compact [-]
+*CrustFraction = nullptr,              //!< fraction crusted at the surface, uses ksat crust [-]
+*CrustFraction0 = nullptr,              //!< fraction crusted at the surface, uses ksat crust [-]
 //*RepellencyFraction,         //!< fraction of water repellency of node 1 in Swatre [-]
 //*RepellencyCell,             //!< Cell included in water repellency in Swatre [-]
-*HardSurface,                //!< value 1 if 'hard' surface: no interception, infiltration, detachment [-]
-*fractionImperm,            //!<// 0 is fully permeable, 1 = impermeable [-]
-*runoffTotalCell,
-*hSwatre,
-*thetaSwatre,
+*HardSurface = nullptr,                //!< value 1 if 'hard' surface: no interception, infiltration, detachment [-]
+*fractionImperm = nullptr,            //!<// 0 is fully permeable, 1 = impermeable [-]
+*runoffTotalCell = nullptr,
+*hSwatre = nullptr,
+*thetaSwatre = nullptr,
 
-*PlantHeight,                //!< height of vegetation/crops [m]
-*Cover,                      //!< vegetation canopy cover fraction [-]
-*Litter,                     //!< vegetation litter cover fraction [-]
-*CanopyStorage,              //!< canopy storage [m]
-*LAI,                        //!< leaf area index [m^2/m^2]
-*LandUnit,                   //!< land unit class (> 0) [-]
+*PlantHeight = nullptr,                //!< height of vegetation/crops [m]
+*Cover = nullptr,                      //!< vegetation canopy cover fraction [-]
+*Litter = nullptr,                     //!< vegetation litter cover fraction [-]
+*CanopyStorage = nullptr,              //!< canopy storage [m]
+*LAI = nullptr,                        //!< leaf area index [m^2/m^2]
+*LandUnit = nullptr,                   //!< land unit class (> 0) [-]
 
-*Cohesion,                   //!< total cohesion of the soil surface: coh soil *(1-cover) + coh plant (cover) [kPa]
-*RootCohesion,               //!< cohesion soil [kPa]
-*CohesionSoil,               //!< cohesion by plant roots [kPa]
-*Y,                          //!< erosion efficiency 0-1, basd on cohesion [-]
-*AggrStab,                   //!< aggregate stability, median of drops in lowe test [-]
-*SplashStrength,                   //!< aggregate stability, median of drops in lowe test [-]
+*Cohesion = nullptr,                   //!< total cohesion of the soil surface: coh soil *(1-cover) + coh plant (cover) [kPa]
+*RootCohesion = nullptr,               //!< cohesion soil [kPa]
+*CohesionSoil = nullptr,               //!< cohesion by plant roots [kPa]
+*Y = nullptr,                          //!< erosion efficiency 0-1, basd on cohesion [-]
+*AggrStab = nullptr,                   //!< aggregate stability, median of drops in lowe test [-]
+*SplashStrength = nullptr,                   //!< aggregate stability, median of drops in lowe test [-]
 //*splashb,                   //!< aggregate stability, median of drops in lowe test [-]
-*D50,                        //!< median of grainsize distribution [mu]
-*D90,                        //!< 90 % of grainsize distribution is below this value [mu]
-*D50CH,                        //!< median of grainsize distribution [mu]
-*D90CH,                        //!< 90 % of grainsize distribution is below this value [mu]
-*cgovers,
-*dgovers,
-*DETSplash,                  //!< splash detachment [kg/cell]
-*DETSplashCum,
-*DETFlow,                    //!< flow detachment [kg/cell]
-*DETFlowCum,
-*DEPCum,
-*DEP,                        //!< deposition [kg/cell]
-*TC,                         //!< transport capacity [kg/m^3]
-*Conc,                       //!< sediment concentration in flow [kg/m^3]
-*Sed,                        //!< sediment content of flow [kg]
-*SettlingVelocitySS,           //!< settling velocity according to Stokes [m/s]
-*SettlingVelocityBL,           //!< settling velocity according to Stokes [m/s]
+*D50 = nullptr,                        //!< median of grainsize distribution [mu]
+*D90 = nullptr,                        //!< 90 % of grainsize distribution is below this value [mu]
+*D50CH = nullptr,                        //!< median of grainsize distribution [mu]
+*D90CH = nullptr,                        //!< 90 % of grainsize distribution is below this value [mu]
+*cgovers = nullptr,
+*dgovers = nullptr,
+*DETSplash = nullptr,                  //!< splash detachment [kg/cell]
+*DETSplashCum = nullptr,
+*DETFlow = nullptr,                    //!< flow detachment [kg/cell]
+*DETFlowCum = nullptr,
+*DEPCum = nullptr,
+*DEP = nullptr,                        //!< deposition [kg/cell]
+*TC = nullptr,                         //!< transport capacity [kg/m^3]
+*Conc = nullptr,                       //!< sediment concentration in flow [kg/m^3]
+*Sed = nullptr,                        //!< sediment content of flow [kg]
+*SettlingVelocitySS = nullptr,           //!< settling velocity according to Stokes [m/s]
+*SettlingVelocityBL = nullptr,           //!< settling velocity according to Stokes [m/s]
 
 // infiltration
-*Fcum,                       //!< cumulative infiltration [m]
+*Fcum = nullptr,                       //!< cumulative infiltration [m]
 //*FSurplus,                   //!< surplus infiltration for kinematic wave, calculated as actual infil - potential infil [m]
 //*fact,                       //!< actual infiltration rate [m/s]
 //*fpot,                       //!< potential infiltration rate [m/s]
 //*InfilVolKinWave,            //!< volume infiltrated in the kin wave (slope and channel) in this timestep [m^3]
-*InfilVol,                   //!< volume of water infiltrated in this timestep [m^3]
-*ChannelInfilVol,                   //!< volume of water infiltrated in this timestep [m^3]
+*InfilVol = nullptr,                   //!< volume of water infiltrated in this timestep [m^3]
+*ChannelInfilVol = nullptr,                   //!< volume of water infiltrated in this timestep [m^3]
 
-*InfilVolCum,                //!< cumulative infiltration volume for mass balance and map report [m^3]
-*InfilmmCum,                 //!< cumulative infiltration volume for map report and drawing [mm]
-*InfilVolFlood,
+*InfilVolCum = nullptr,                //!< cumulative infiltration volume for mass balance and map report [m^3]
+*InfilmmCum = nullptr,                 //!< cumulative infiltration volume for map report and drawing [mm]
+*InfilVolFlood = nullptr,
 
-*Lw,
-*Lwmm,
+*Lw = nullptr,
+*Lwmm = nullptr,
 
-*ThetaS1,                    //!< porosity soil layer 1 [-]
-*ThetaI1,                    //!< initial moisture content soil layer 1 [-]
-*ThetaI1a,                    //!< initial moisture content soil layer 1 [-]
-*Psi1,                       //!< intial suction head wetting front soil layer 1 (input map is in cm) [m]
-*ThetaR1,
-*ThetaFC1,
-*Ksat1,                      //!< saturated hydraulic conductivity soil layer 1 (input is in mm/h) [m/s]
-*SoilDepth1,                 //!< depth to end soil layer 1 (input is in mm) [m]
-*SoilDepth1init,                 //!< depth to end soil layer 1 (input is in mm) [m]
+*ThetaS1 = nullptr,                    //!< porosity soil layer 1 [-]
+*ThetaI1 = nullptr,                    //!< initial moisture content soil layer 1 [-]
+*ThetaI1a = nullptr,                    //!< initial moisture content soil layer 1 [-]
+*Psi1 = nullptr,                       //!< intial suction head wetting front soil layer 1 (input map is in cm) [m]
+*ThetaR1 = nullptr,
+*ThetaFC1 = nullptr,
+*Ksat1 = nullptr,                      //!< saturated hydraulic conductivity soil layer 1 (input is in mm/h) [m/s]
+*SoilDepth1 = nullptr,                 //!< depth to end soil layer 1 (input is in mm) [m]
+*SoilDepth1init = nullptr,                 //!< depth to end soil layer 1 (input is in mm) [m]
 
-*ThetaS2,                    //!< porosity soil layer 2 [-]
-*ThetaI2,                    //!< initial moisture content soil layer 2 [-]
-*ThetaI2a,                    //!< initial moisture content soil layer 2 [-]
-*ThetaR2,
-*ThetaFC2,
-*Psi2,                       //!< intial suction head wetting front soil layer 2 (input map is in cm) [m]
-*Ksat2,                      //!< saturated hydraulic conductivity soil layer 2 (input is in mm/h) [m/s]
-*SoilDepth2,                 //!< depth to end soil layer 2 (input is in mm) [m]
-*SoilDepth2init,                 //!< depth to end soil layer 2 (input is in mm) [m]
+*ThetaS2 = nullptr,                    //!< porosity soil layer 2 [-]
+*ThetaI2 = nullptr,                    //!< initial moisture content soil layer 2 [-]
+*ThetaI2a = nullptr,                    //!< initial moisture content soil layer 2 [-]
+*ThetaR2 = nullptr,
+*ThetaFC2 = nullptr,
+*Psi2 = nullptr,                       //!< intial suction head wetting front soil layer 2 (input map is in cm) [m]
+*Ksat2 = nullptr,                      //!< saturated hydraulic conductivity soil layer 2 (input is in mm/h) [m/s]
+*SoilDepth2 = nullptr,                 //!< depth to end soil layer 2 (input is in mm) [m]
+*SoilDepth2init = nullptr,                 //!< depth to end soil layer 2 (input is in mm) [m]
 
-*ThetaS3,                    //!< porosity soil layer 1 [-]
-*ThetaI3,                    //!< initial moisture content soil layer 1 [-]
-*ThetaI3a,                    //!< initial moisture content soil layer 1 [-]
-*Psi3,                       //!< intial suction head wetting front soil layer 1 (input map is in cm) [m]
-*ThetaR3,
-*ThetaFC3,
-*Ksat3,                      //!< saturated hydraulic conductivity soil layer 1 (input is in mm/h) [m/s]
-*SoilDepth3,                 //!< depth to end soil layer 1 (input is in mm) [m]
-*SoilDepth3init,                 //!< depth to end soil layer 1 (input is in mm) [m]
+*ThetaS3 = nullptr,                    //!< porosity soil layer 1 [-]
+*ThetaI3 = nullptr,                    //!< initial moisture content soil layer 1 [-]
+*ThetaI3a = nullptr,                    //!< initial moisture content soil layer 1 [-]
+*Psi3 = nullptr,                       //!< intial suction head wetting front soil layer 1 (input map is in cm) [m]
+*ThetaR3 = nullptr,
+*ThetaFC3 = nullptr,
+*Ksat3 = nullptr,                      //!< saturated hydraulic conductivity soil layer 1 (input is in mm/h) [m/s]
+*SoilDepth3 = nullptr,                 //!< depth to end soil layer 1 (input is in mm) [m]
+*SoilDepth3init = nullptr,                 //!< depth to end soil layer 1 (input is in mm) [m]
 
-*lambda1,
-*lambda2,
-*lambda3,
-*vgalpha1,
-*vgalpha2,
-*vgalpha3,
-*vgn1,
-*vgn2,
-*vgn3,
-*psi1ae,
-*psi2ae,
-*psi3ae,
+*lambda1 = nullptr,
+*lambda2 = nullptr,
+*lambda3 = nullptr,
+*vgalpha1 = nullptr,
+*vgalpha2 = nullptr,
+*vgalpha3 = nullptr,
+*vgn1 = nullptr,
+*vgn2 = nullptr,
+*vgn3 = nullptr,
+*psi1ae = nullptr,
+*psi2ae = nullptr,
+*psi3ae = nullptr,
 
-*KsatCrust,                  //!< saturated hydraulic conductivity crusted soil surface (input is in mm/h) [m/s]
-*PoreCrust,                //!< saturated hydraulic conductivity compacted soil surface (input is in mm/h) [m/s]
-*KsatCompact,                //!< saturated hydraulic conductivity compacted soil surface (input is in mm/h) [m/s]
-*PoreCompact,                //!< saturated hydraulic conductivity compacted soil surface (input is in mm/h) [m/s]
-*KsatGrass,                  //!< saturated hydraulic conductivity grass strip (input is in mm/h) [m/s]
-*PoreGrass,                  //!< Porosity grass strip (input in cm3/cm3)
-*CohGrass,                   //!< Cohesion grass strip (input in kPa)
-*Ksateff,                    //!< effective saturated hydraulic conductivity (input is in mm/h) [m/s]
-*Poreeff,
-*Thetaeff,
-*chanmask3,
+*KsatCrust = nullptr,                  //!< saturated hydraulic conductivity crusted soil surface (input is in mm/h) [m/s]
+*PoreCrust = nullptr,                //!< saturated hydraulic conductivity compacted soil surface (input is in mm/h) [m/s]
+*KsatCompact = nullptr,                //!< saturated hydraulic conductivity compacted soil surface (input is in mm/h) [m/s]
+*PoreCompact = nullptr,                //!< saturated hydraulic conductivity compacted soil surface (input is in mm/h) [m/s]
+*KsatGrass = nullptr,                  //!< saturated hydraulic conductivity grass strip (input is in mm/h) [m/s]
+*PoreGrass = nullptr,                  //!< Porosity grass strip (input in cm3/cm3)
+*CohGrass = nullptr,                   //!< Cohesion grass strip (input in kPa)
+*Ksateff = nullptr,                    //!< effective saturated hydraulic conductivity (input is in mm/h) [m/s]
+*Poreeff = nullptr,
+*Thetaeff = nullptr,
+*chanmask3 = nullptr,
 
-*Perc,
-*PercmmCum,
-*GrassFraction,              //!< fraction of grasstrip in a cell [-]
-*SedimentFilter,             //!< sediment deposited in the sediment trap in kg/m2
-*SedMaxVolume,               //!< maxvol of sediment in that can be trapped in m3
-*GrassWidthDX,               //!< width of grasstrip in [m]
+*Perc = nullptr,
+*PercmmCum = nullptr,
+*GrassFraction = nullptr,              //!< fraction of grasstrip in a cell [-]
+*SedimentFilter = nullptr,             //!< sediment deposited in the sediment trap in kg/m2
+*SedMaxVolume = nullptr,               //!< maxvol of sediment in that can be trapped in m3
+*GrassWidthDX = nullptr,               //!< width of grasstrip in [m]
 
 //swatre
-*OMcorr,
-*DensFact,
-*ProfileID,                  //!< SWATRE profile unit number map
-*ProfileIDCrust,             //!< SWATRE profile unit number map for crusted areas
-*ProfileIDCompact,           //!< SWATRE profile unit number map for compacted areas
-*ProfileIDGrass,             //!< SWATRE profile unit number map for grass strips
-*SwatreOutput,               //!< SWATRE cells flagged for output
+*OMcorr = nullptr,
+*DensFact = nullptr,
+*ProfileID = nullptr,                  //!< SWATRE profile unit number map
+*ProfileIDCrust = nullptr,             //!< SWATRE profile unit number map for crusted areas
+*ProfileIDCompact = nullptr,           //!< SWATRE profile unit number map for compacted areas
+*ProfileIDGrass = nullptr,             //!< SWATRE profile unit number map for grass strips
+*SwatreOutput = nullptr,               //!< SWATRE cells flagged for output
 //*inith,                      //!< SWATRE inithead in -cm
 
-*LDDChannel,                 //!<
-*LDDbaseflow,
-*ChannelWidthO,               //!<
-*ChannelWidth,               //!<
-*ChannelDepth,               //!<
-*ChannelSide,                //!<
-*ChannelQSide,                //!<
+*LDDChannel = nullptr,                 //!<
+*LDDbaseflow = nullptr,
+*ChannelWidthO = nullptr,               //!<
+*ChannelWidth = nullptr,               //!<
+*ChannelDepth = nullptr,               //!<
+*ChannelSide = nullptr,                //!<
+*ChannelQSide = nullptr,                //!<
 //*ChannelQb,                   //!<
-*ChannelQ,                   //!<
-*ChannelQn,                  //!<
-*ChannelQntot,
-*ChannelQs,                  //!<
-*ChannelQsn,                 //!<
-*ChannelQBLs,                  //!<
-*ChannelQBLsn,                 //!<
-*ChannelQSSs,                  //!<
-*ChannelQSSsn,                 //!<
-*ChannelGrad,                //!<
-*ChannelV,                   //!<
-*ChannelN,                   //!<
-*ChannelWH,                  //!<
-*ChannelPerimeter,
-*ChannelWidthB,
+*ChannelQ = nullptr,                   //!<
+*ChannelQn = nullptr,                  //!<
+*ChannelQntot = nullptr,
+*ChannelQs = nullptr,                  //!<
+*ChannelQsn = nullptr,                 //!<
+*ChannelQBLs = nullptr,                  //!<
+*ChannelQBLsn = nullptr,                 //!<
+*ChannelQSSs = nullptr,                  //!<
+*ChannelQSSsn = nullptr,                 //!<
+*ChannelGrad = nullptr,                //!<
+*ChannelV = nullptr,                   //!<
+*ChannelN = nullptr,                   //!<
+*ChannelWH = nullptr,                  //!<
+*ChannelPerimeter = nullptr,
+*ChannelWidthB = nullptr,
 //*ChannelCos,
 //*ChannelWHExtended,                  //!<
 //*ChannelVolExtended,                  //!<
-*ChannelWaterVol,            //!<
+*ChannelWaterVol = nullptr,            //!<
 //*Channelq,                   //!<
-*ChannelAlpha,               //!<
-*ChannelDX,                  //!<
-*ChannelKsat,                //!<
-*ChannelInfM3,                //!<
+*ChannelAlpha = nullptr,               //!<
+*ChannelDX = nullptr,                  //!<
+*ChannelKsat = nullptr,                //!<
+*ChannelInfM3 = nullptr,                //!<
 
-*ChannelAdj,                //!<
-*CHAdjDX,                //!<
-*BaseflowL,
+*ChannelAdj = nullptr,                //!<
+*CHAdjDX = nullptr,                //!<
+*BaseflowL = nullptr,
 
-*cosGrad,
-*tanGrad,
-*BulkDensity,
-*AngleFriction,
-*FSlope,
+*cosGrad = nullptr,
+*tanGrad = nullptr,
+*BulkDensity = nullptr,
+*AngleFriction = nullptr,
+*FSlope = nullptr,
 
 // channel erosion
 //*ChannelPerimeter,           //!<
-*ChannelDetFlow,             //!<
-*ChannelDep,                 //!<
+*ChannelDetFlow = nullptr,             //!<
+*ChannelDep = nullptr,                 //!<
 //*ChannelSed,                 //!<
-*ChannelBLSed,                 //!<
-*ChannelSSSed,                 //!<
-*ChannelBLTC,                 //!<
-*ChannelSSTC,                 //!<
-*ChannelBLDepth,                 //!<
-*ChannelSSDepth,                 //!<
-*ChannelConc,                //!<
-*ChannelBLConc,                //!<
-*ChannelSSConc,                //!<
-*ChannelTC,                  //!<
-*ChannelCohesion,            //!<
-*ChannelY,                   //!<
-*ChannelPAngle,               //!<
-*ChannelQsr,
+*ChannelBLSed = nullptr,                 //!<
+*ChannelSSSed = nullptr,                 //!<
+*ChannelBLTC = nullptr,                 //!<
+*ChannelSSTC = nullptr,                 //!<
+*ChannelBLDepth = nullptr,                 //!<
+*ChannelSSDepth = nullptr,                 //!<
+*ChannelConc = nullptr,                //!<
+*ChannelBLConc = nullptr,                //!<
+*ChannelSSConc = nullptr,                //!<
+*ChannelTC = nullptr,                  //!<
+*ChannelCohesion = nullptr,            //!<
+*ChannelY = nullptr,                   //!<
+*ChannelPAngle = nullptr,               //!<
+*ChannelQsr = nullptr,
 
 //baseflow
-*BaseFlowDischarges,
-*BaseFlowInitialVolume,
-*BaseFlowInflow,
+*BaseFlowDischarges = nullptr,
+*BaseFlowInitialVolume = nullptr,
+*BaseFlowInflow = nullptr,
 
 // flood maps
-*floodHmxMax,                    //!<
-*floodTime,                    //!<
-*floodTimeStart,                //!<
-*floodVMax,                    //!<
-*floodVHMax,                    //!<
-*maxChannelflow,                    //!<
-*maxChannelWH,                    //!<
-*hmx,                        //!<
-*hmxWH,                        //!<
-*hmxrunoff,
-*hmxInit,                    //!<
-*FloodDomain,                //!<
-*Buffers,                    //!<
-*GridRetention,                    //!<
-*GridRetentionAct,
-*ChanRetention,                    //!<
-*ChanRetentionAct,
-*ChannelDiameter,                //!<
-*ChannelCulvert,                //!<
-*ChannelMaxQ,                //!<
-*ChannelMaxAlpha,                //!<
-*ChannelMaxArea,
-*FloodWaterVol,                //!<
-*RunoffWaterVol,                //!<
+*floodHmxMax = nullptr,                    //!<
+*floodTime = nullptr,                    //!<
+*floodTimeStart = nullptr,                //!<
+*floodVMax = nullptr,                    //!<
+*floodVHMax = nullptr,                    //!<
+*maxChannelflow = nullptr,                    //!<
+*maxChannelWH = nullptr,                    //!<
+*hmx = nullptr,                        //!<
+*hmxWH = nullptr,                        //!<
+*hmxrunoff = nullptr,
+*hmxInit = nullptr,                    //!<
+*FloodDomain = nullptr,                //!<
+*Buffers = nullptr,                    //!<
+*GridRetention = nullptr,                    //!<
+*GridRetentionAct = nullptr,
+*ChanRetention = nullptr,                    //!<
+*ChanRetentionAct = nullptr,
+*ChannelDiameter = nullptr,                //!<
+*ChannelCulvert = nullptr,                //!<
+*ChannelMaxQ = nullptr,                //!<
+*ChannelMaxAlpha = nullptr,                //!<
+*ChannelMaxArea = nullptr,
+*FloodWaterVol = nullptr,                //!<
+*RunoffWaterVol = nullptr,                //!<
 
 //*FloodZonePotential,                //!<
-*FloodDT,
-*Uflood,*Vflood,
-*hs, //*vs, *us,
-*gflowx,
-*gflowy,
-*hllx12_0,
-*hlly12_0,
-*hllx21_1,
-*hllx21_2,
-*hlly21_1,
-*hlly21_2,
+*FloodDT = nullptr,
+*Uflood = nullptr,*Vflood = nullptr,
+*hs = nullptr, //*vs, *us,
+*gflowx = nullptr,
+*gflowy = nullptr,
+*hllx12_0 = nullptr,
+*hlly12_0 = nullptr,
+*hllx21_1 = nullptr,
+*hllx21_2 = nullptr,
+*hlly21_1 = nullptr,
+*hlly21_2 = nullptr,
 
 
 //FULLSWOF2D with Sediment
-*BLDepthFlood,
-*SSDepthFlood,
-*BLDetFlood,
-*BLTCFlood,
-*SSTCFlood,
-*SSDetFlood,
-*DepFlood,
-*BLCFlood,
-*BLFlood,
-*SSCFlood,
-*SSFlood,
+*BLDepthFlood = nullptr,
+*SSDepthFlood = nullptr,
+*BLDetFlood = nullptr,
+*BLTCFlood = nullptr,
+*SSTCFlood = nullptr,
+*SSDetFlood = nullptr,
+*DepFlood = nullptr,
+*BLCFlood = nullptr,
+*BLFlood = nullptr,
+*SSCFlood = nullptr,
+*SSFlood = nullptr,
 
-*LDDTile,                    //!< LDD network of tile drains, must be connected to outlet
-*TileDrainSoil,              //!< drain volume from layer
-*TileDiameter,                  //!< total width of drains in cell (m)
-*TileArea,                  //!< total width of drains in cell (m)
-*TileWidth,                  //!< total width of drains in cell (m)
-*TileHeight,                 //!< height of drain (m)
-*TileDepth,                  //!< depth of tiles in soil below surface (m)
+*LDDTile = nullptr,                    //!< LDD network of tile drains, must be connected to outlet
+*TileDrainSoil = nullptr,              //!< drain volume from layer
+*TileDiameter = nullptr,                  //!< total width of drains in cell (m)
+*TileArea = nullptr,                  //!< total width of drains in cell (m)
+*TileWidth = nullptr,                  //!< total width of drains in cell (m)
+*TileHeight = nullptr,                 //!< height of drain (m)
+*TileDepth = nullptr,                  //!< depth of tiles in soil below surface (m)
 //*TileInlet,               //!< sinkhole on surface connecting to tiledrains (m2)
-*TileQ,                      //!< water flux in drains m3/s
-*TileMaxQ,                      //!< water flux in drains m3/s
-*TileQn,                     //!< new water flux in drains m3/s
-*TileGrad,                   //!< gradient of the tiledrain system
-*TileN,                      //!< mannings inside the tiledrains
-*TileWaterVol,               //!< water volume in the tiledrains (m3)
-*TileWaterVolSoil,           //!< water volume in the tiledrains from the soil only, used for mass bal corection (m3)
-*RunoffVolinToTile,          //!< can be used for shortcut of surface pits to tile system
-*TileAlpha,                  //!< alpha in tile drain, in A = alpha*Q^beta
-*TileMaxAlpha,                      //!< water flux in drains m3/s
+*TileQ = nullptr,                      //!< water flux in drains m3/s
+*TileMaxQ = nullptr,                      //!< water flux in drains m3/s
+*TileQn = nullptr,                     //!< new water flux in drains m3/s
+*TileGrad = nullptr,                   //!< gradient of the tiledrain system
+*TileN = nullptr,                      //!< mannings inside the tiledrains
+*TileWaterVol = nullptr,               //!< water volume in the tiledrains (m3)
+*TileWaterVolSoil = nullptr,           //!< water volume in the tiledrains from the soil only, used for mass bal corection (m3)
+*RunoffVolinToTile = nullptr,          //!< can be used for shortcut of surface pits to tile system
+*TileAlpha = nullptr,                  //!< alpha in tile drain, in A = alpha*Q^beta
+*TileMaxAlpha = nullptr,                      //!< water flux in drains m3/s
 
-*TotalChanDetMap,                //!<
-*TotalChanDepMap,                //!<
-*TotalSoillossMap,           //!<
-*TotalSed,                   //!<
-*TotalConc,                  //!<
+*TotalChanDetMap = nullptr,                //!<
+*TotalChanDepMap = nullptr,                //!<
+*TotalSoillossMap = nullptr,           //!<
+*TotalSed = nullptr,                   //!<
+*TotalConc = nullptr,                  //!<
 
-*tm,                         //!< Auxilary map
-*tma,                        //!< Auxilary map
-*tmb,                        //!< Auxilary map
-*tmc,                        //!< Auxilary map
-*tmd,                        //!< Auxilary map
-*tmshow,
+*tm = nullptr,                         //!< Auxilary map
+*tma = nullptr,                        //!< Auxilary map
+*tmb = nullptr,                        //!< Auxilary map
+*tmc = nullptr,                        //!< Auxilary map
+*tmd = nullptr,                        //!< Auxilary map
+*tmshow = nullptr,
 //display combinations
-*COMBO_V,
-*COMBO_SS,
-*COMBO_BL,
-*COMBO_TC,
-*ChannelDepthExtended,
-*ChannelWidthExtended,
-*ChannelNeighborsExtended,
-*ChannelSourceXExtended,
-*ChannelSourceYExtended,
-*ChannelMaskExtended,
-*ChannelBoundaryExtended,
-*ChannelBoundaryLExtended,
-*ChannelBoundaryRExtended,
+*COMBO_V = nullptr,
+*COMBO_SS = nullptr,
+*COMBO_BL = nullptr,
+*COMBO_TC = nullptr,
+*ChannelDepthExtended = nullptr,
+*ChannelWidthExtended = nullptr,
+*ChannelNeighborsExtended = nullptr,
+*ChannelSourceXExtended = nullptr,
+*ChannelSourceYExtended = nullptr,
+*ChannelMaskExtended = nullptr,
+*ChannelBoundaryExtended = nullptr,
+*ChannelBoundaryLExtended = nullptr,
+*ChannelBoundaryRExtended = nullptr,
 
-*FlowBarrier,                //!< Flow barriers type
-*FlowBarrierN,               //!< Flow barriers height North of cell
-*FlowBarrierW,               //!< Flow barriers height West of cell
-*FlowBarrierS,               //!< Flow barriers height South of cell
-*FlowBarrierE,               //!< Flow barriers height East of cell
-*FlowBarrierNT,              //!< Flow barriers end timing North of cell
-*FlowBarrierWT,              //!< Flow barriers end timing West of cell
-*FlowBarrierST,              //!< Flow barriers end timing South of cell
-*FlowBarrierET               //!< Flow barriers end timing East of cell
+*FlowBarrier = nullptr,                //!< Flow barriers type
+*FlowBarrierN = nullptr,               //!< Flow barriers height North of cell
+*FlowBarrierW = nullptr,               //!< Flow barriers height West of cell
+*FlowBarrierS = nullptr,               //!< Flow barriers height South of cell
+*FlowBarrierE = nullptr,               //!< Flow barriers height East of cell
+*FlowBarrierNT = nullptr,              //!< Flow barriers end timing North of cell
+*FlowBarrierWT = nullptr,              //!< Flow barriers end timing West of cell
+*FlowBarrierST = nullptr,              //!< Flow barriers end timing South of cell
+*FlowBarrierET = nullptr               //!< Flow barriers end timing East of cell
 
 ;
 
-cTRGBMap * RGB_Image;
+cTRGBMap * RGB_Image = nullptr;

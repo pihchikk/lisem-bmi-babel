@@ -27,6 +27,10 @@
 #      Python ALIASES dict against kAlias (its actual source of truth) even
 #      though tests/ runs from a copy outside the repo. Without this it's set
 #      relative to the test file, which only resolves for ad hoc in-repo runs.
+#   5. PYTHON -> the interpreter with pytest AND the installed bmi_lisem wheel
+#      (the compiled extension, not the source tree -- see point 3 above).
+#      System python3 has neither on this host; defaults to the dev venv used
+#      throughout this project. Override by exporting PYTHON yourself.
 
 set -euo pipefail
 
@@ -35,11 +39,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export LD_LIBRARY_PATH="${REPO_ROOT}/openlisem_bmi/build:${LD_LIBRARY_PATH:-}"
 export LISEM_TEST_RUNFILE="${LISEM_TEST_RUNFILE:-/home/claude/lisem-work/VNIIMZ_20m/res_test/run_test.run}"
 export LISEM_BMI_CPP_SRC="${REPO_ROOT}/openlisem_bmi/bmi_lisem/BmiLisem.cpp"
+PYTHON="${PYTHON:-/home/claude/venvs/aquacrop-bmi-gate5/bin/python3}"
 
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 cp -r "${REPO_ROOT}/bmi_lisem/tests" "$WORKDIR/tests"
 
 echo "LISEM_TEST_RUNFILE=${LISEM_TEST_RUNFILE}"
+echo "PYTHON=${PYTHON}"
 cd "$WORKDIR/tests"
-exec python3 -m pytest -q --no-header -rs -o addopts="" "$@" .
+exec "$PYTHON" -m pytest -q --no-header -rs -o addopts="" "$@" .

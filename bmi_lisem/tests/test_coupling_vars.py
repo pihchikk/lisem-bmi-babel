@@ -99,13 +99,87 @@ def _read(m, name):
 class TestMetadata:
     """Variable metadata is self-consistent without running a full event."""
 
+    # layer-2/-3 variants are genuinely optional -- they depend on how many soil
+    # layers the runfile declares (nrSoilLayers), not a fixed set. Same treatment
+    # as TestCouplingNamesPresent below; don't assert presence or absence either
+    # way. (VNIIMZ_20m specifically is a real 2-layer config with no layer-3 data
+    # on disk at all -- layer-3 correctly not being advertised is expected, not a
+    # bug. This test used to assert it unconditionally, which only ever passed
+    # because of the now-fixed registry bug: TWorld's constructor left
+    # conditionally-allocated map pointers as uninitialized heap garbage, which
+    # occasionally looked non-null and got a variable with no real backing
+    # advertised as active. See TMmapVariables.h/model.h.)
+    OPTIONAL_LAYER_SUFFIXES = ("layer-2", "layer-3")
+
     @needs_runfile
     def test_coupling_vars_in_output_list(self):
         m = _make_model()
         try:
             out_vars = m.get_output_var_names()
             for name in MAP_OUTPUTS_COUPLING + SCALAR_OUTPUTS:
+                if name.endswith(self.OPTIONAL_LAYER_SUFFIXES):
+                    continue
                 assert name in out_vars, f"{name!r} missing from output var names"
+        finally:
+            m.finalize()
+
+    @needs_runfile
+    def test_inactive_variable_raises_cleanly(self):
+        """A variable that's a real, known canonical name but inactive for this
+        runfile's soil-layer config (not a typo, not genuinely unknown) must
+        raise the same clean, catchable error as an unknown name -- never
+        crash, never silently return zero/garbage. This is exactly the path a
+        coupler hits if it assumes a 3-layer soil profile against a 2-layer
+        runfile like VNIIMZ_20m.
+
+        Before the registry-nullptr fix this was untestable: the variable's
+        presence in the registry was non-deterministic (heap-garbage-
+        dependent -- see TMmapVariables.h/model.h and BmiLisem::GetValue's
+        heap-buffer-overflow this masked). The fix makes registry membership
+        deterministic, which is what makes this a permanent, meaningful test
+        rather than a coin flip.
+        """
+        m = _make_model()
+        try:
+            out_vars = m.get_output_var_names()
+            name = "soil_water_actual_layer-3"
+            assert name not in out_vars, (
+                f"{name!r} unexpectedly advertised for this runfile -- pick a "
+                "different genuinely-inactive variable to keep this test meaningful"
+            )
+            with pytest.raises(RuntimeError):
+                m.get_var_grid(name)
+            with pytest.raises(RuntimeError):
+                m.get_var_units(name)
+            buf = np.empty(1, dtype=np.float64)
+            with pytest.raises(RuntimeError):
+                m.get_value(name, buf)
+        finally:
+            m.finalize()
+
+    @needs_runfile
+    def test_every_advertised_output_var_is_readable(self):
+        """Every name get_output_var_names() advertises must have a real,
+        readable backing -- the direct, general assertion for the bug class
+        behind the SIGSEGV: the registry advertising a variable whose backing
+        pointer wasn't actually valid (TWorld's uninitialized conditionally-
+        allocated map pointers, see TMmapVariables.h/model.h). This catches
+        that class for ANY variable, including ones nobody thought to check
+        individually, and any future recurrence.
+
+        Checked pre-run (no update() calls): the registry decision that
+        matters here is made entirely inside initialize(), independent of run
+        state -- confirmed directly while investigating the original crash
+        (advertised-variable-count was stable across pre-run/mid-run/post-run
+        checks; only the registry-build step at initialize() time varied).
+        """
+        m = _make_model()
+        try:
+            for name in m.get_output_var_names():
+                grid = m.get_var_grid(name)
+                n = m.get_grid_size(grid)
+                buf = np.empty(n, dtype=np.float64)
+                m.get_value(name, buf)  # must not raise or crash
         finally:
             m.finalize()
 
