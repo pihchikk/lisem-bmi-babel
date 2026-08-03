@@ -24,7 +24,13 @@ needs_runfile = pytest.mark.skipif(
 )
 
 # Full alias table: legacy CSDMS name -> canonical ESoil name.
-# Must stay in sync with kAlias in BmiLisem.cpp.
+# Must stay in sync with kAlias in BmiLisem.cpp -- test_alias_table_matches_cpp_source below
+# parses the C++ literal directly and fails if this dict drifts from it. This table had
+# drifted before that test existed: domain_soil_water_storage__volume pointed at the wrong
+# canonical name here (surface-water~storage_volume instead of C++'s soil_water~storage_volume
+# -- two different scalar outputs, one of which is dead code always reading 0.0), and two C++
+# aliases were missing entirely. A legacy name silently resolving to the wrong variable is
+# worse than a crash: the mismatch (0.0 vs a real accumulated value) has no error to notice.
 ALIASES = {
     "soil_water__volume_fraction":            "soil_water_actual",
     "land_vegetation__cover_fraction":        "plant_cover~projective",
@@ -42,8 +48,10 @@ ALIASES = {
     "domain_interception__volume":            "surface-water~interception_volume",
     "domain_infiltration__volume":            "surface-water~infiltration_volume",
     "domain_evapotranspiration__volume":      "surface-water~evapotranspiration_volume",
-    "domain_soil_water_storage__volume":      "surface-water~storage_volume",
+    "domain_soil_water_storage__volume":      "soil_water~storage_volume",
     "domain_runoff__volume":                  "surface-water~runoff_volume",
+    "atmosphere_water__precipitation_leq-depth": "surface-water~rainfall_amount",
+    "surface_water__runoff_depth":            "surface-water~runoff_amount",
 }
 
 # Coupling-critical names that MUST match the AquaCrop BMI.
@@ -127,7 +135,14 @@ def test_get_value_identical_for_both_spellings():
 
 @needs_runfile
 def test_erosion_scaled_by_canonical_name():
-    """Erosion (kg/m2) scaling must work when called by the canonical name."""
+    """Erosion (kg/m2) scaling must work when called by the canonical name.
+
+    soil_erosion~mass-per-area is TotalSoillossMap (lisTotalsMB.cpp:495), a signed net
+    soil-loss quantity by design -- negative cells are net deposition, not a scaling or sign
+    bug (see test_coupling_vars.py's test_erosion_finite_nonnegative for the full trace,
+    which exercises the erosion/deposition split directly). This test is about the
+    canonical-name scaling path specifically, so it only checks finiteness and units here.
+    """
     m = _make_model()
     try:
         if "soil_erosion~mass-per-area" not in set(m.get_output_var_names()):
@@ -138,7 +153,6 @@ def test_erosion_scaled_by_canonical_name():
         m.get_value("soil_erosion~mass-per-area", e)
         finite = e[np.isfinite(e)]
         assert len(finite) > 0
-        assert np.all(finite >= 0)
         assert m.get_var_units("soil_erosion~mass-per-area") == "kg m-2"
     finally:
         m.finalize()
@@ -157,3 +171,60 @@ def test_coupling_names_present():
             assert name in advertised, f"coupling name {name!r} not advertised"
     finally:
         m.finalize()
+
+
+def _find_bmilisem_cpp():
+    """Locates BmiLisem.cpp so the alias table can be checked against its actual source of
+    truth (kAlias), not just against itself. Checks LISEM_BMI_CPP_SRC first (set by
+    scripts/run_local_tests.sh and CI, since tests are deliberately run from a copy outside
+    the repo -- see docs/BUILDING.md's "Editable installs and shadowing" -- so a path relative
+    to this file only resolves when running directly from a repo checkout); falls back to that
+    relative guess for ad hoc invocations. Returns None if neither exists, so the test below
+    can skip with a clear reason instead of failing on an unrelated environment gap.
+    """
+    env_path = os.environ.get("LISEM_BMI_CPP_SRC", "")
+    if env_path and os.path.isfile(env_path):
+        return env_path
+    guess = os.path.join(
+        os.path.dirname(__file__), "..", "..", "openlisem_bmi", "bmi_lisem", "BmiLisem.cpp"
+    )
+    return guess if os.path.isfile(guess) else None
+
+
+def _parse_cpp_kalias(path):
+    """Extracts kAlias's { "legacy", "canonical" } pairs directly from BmiLisem.cpp's source
+    text. No native rebuild needed to check this, unlike exposing the table through the BMI
+    itself would be -- resolveVarAlias() is private and BMI has no enumerate-aliases call."""
+    import re
+
+    text = open(path, encoding="utf-8").read()
+    start = text.index("kAlias = {")
+    end = text.index("};", start)
+    body = text[start:end]
+    return dict(re.findall(r'\{\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\}', body))
+
+
+def test_alias_table_matches_cpp_source():
+    """ALIASES (this file) must stay in sync with kAlias (BmiLisem.cpp) -- the C++ table is
+    the actual source of truth; this Python copy exists only so the other tests in this file
+    have something to iterate over without a BMI call to enumerate aliases. A previous drift
+    here (domain_soil_water_storage__volume pointing at the wrong canonical name, and two
+    aliases missing outright) went undetected because every OTHER test in this file only
+    checks self-consistency of this same wrong copy -- this is the one test that checks it
+    against the real thing. Does not need a runfile or an initialized model, only the source
+    file, so it isn't gated by @needs_runfile.
+    """
+    cpp_path = _find_bmilisem_cpp()
+    if cpp_path is None:
+        pytest.skip(
+            "BmiLisem.cpp not found (set LISEM_BMI_CPP_SRC, or run from a repo checkout) "
+            "-- cannot check ALIASES against its source of truth"
+        )
+    cpp_aliases = _parse_cpp_kalias(cpp_path)
+    assert cpp_aliases, f"parsed zero entries from kAlias in {cpp_path} -- parser or path is wrong"
+    assert ALIASES == cpp_aliases, (
+        f"ALIASES has drifted from kAlias in {cpp_path}:\n"
+        f"  only in Python ALIASES: {sorted(set(ALIASES) - set(cpp_aliases))}\n"
+        f"  only in C++ kAlias:     {sorted(set(cpp_aliases) - set(ALIASES))}\n"
+        f"  differing targets:      {sorted(k for k in set(ALIASES) & set(cpp_aliases) if ALIASES[k] != cpp_aliases[k])}"
+    )

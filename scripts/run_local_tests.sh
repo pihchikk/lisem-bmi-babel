@@ -21,6 +21,12 @@
 #
 # A full run against VNIIMZ_20m takes ~4 minutes per event; 7 of the 13
 # tests each run one, so expect ~25-30 minutes end to end.
+#
+#   4. LISEM_BMI_CPP_SRC -> BmiLisem.cpp, so
+#      test_standard_names.py::test_alias_table_matches_cpp_source can check the
+#      Python ALIASES dict against kAlias (its actual source of truth) even
+#      though tests/ runs from a copy outside the repo. Without this it's set
+#      relative to the test file, which only resolves for ad hoc in-repo runs.
 
 set -euo pipefail
 
@@ -28,6 +34,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 export LD_LIBRARY_PATH="${REPO_ROOT}/openlisem_bmi/build:${LD_LIBRARY_PATH:-}"
 export LISEM_TEST_RUNFILE="${LISEM_TEST_RUNFILE:-/home/claude/lisem-work/VNIIMZ_20m/res_test/run_test.run}"
+export LISEM_BMI_CPP_SRC="${REPO_ROOT}/openlisem_bmi/bmi_lisem/BmiLisem.cpp"
 
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT

@@ -197,7 +197,15 @@ class TestPostEventValues:
 
     @needs_runfile
     def test_erosion_finite_nonnegative(self):
-        """Erosion map is finite and non-negative where erosion is expected."""
+        """Erosion map is finite. soil_erosion~mass-per-area is TotalSoillossMap
+        (lisTotalsMB.cpp:495), a SIGNED net-soil-loss quantity by design: positive = net
+        erosion, negative = net deposition -- the engine's own reporting code splits it the
+        same way for display (lisReportmaps.cpp:147-148, qMax(0,.)/qMin(0,.)). This test used
+        to assert the raw value is non-negative, which is wrong (deposition-heavy cells are
+        expected to read negative); it now checks the erosion *component* -- what the test
+        name actually asks about -- via that same qMax(0,.) split, and confirms real
+        detachment happened somewhere in the event rather than the split being vacuously true.
+        """
         m = _make_model()
         try:
             out_vars = set(m.get_output_var_names())
@@ -209,7 +217,17 @@ class TestPostEventValues:
             erosion_flat = _read(m, "soil_erosion~mass-per-area")
             valid = erosion_flat[np.isfinite(erosion_flat)]
             assert len(valid) > 0, "all erosion values are NaN/inf"
-            assert np.all(valid >= 0), "erosion map contains negative kg/m² values"
+
+            erosion_component = np.maximum(valid, 0.0)
+            deposition_component = np.minimum(valid, 0.0)
+            assert np.any(erosion_component > 0), (
+                "no cell shows net erosion (all non-negative kg/m² values are exactly 0) -- "
+                "expected some detachment somewhere in a full event"
+            )
+            assert np.any(deposition_component < 0), (
+                "no cell shows net deposition -- expected on VNIIMZ_20m; if this genuinely "
+                "changed, the split may no longer be the right shape of check for this fixture"
+            )
         finally:
             m.finalize()
 

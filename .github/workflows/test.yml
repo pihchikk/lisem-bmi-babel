@@ -126,6 +126,9 @@ jobs:
       - name: Run pytest (against the installed wheel, not the source tree)
         env:
           LD_LIBRARY_PATH: /usr/local/lib:${{ env.QWT_PREFIX }}/lib:${{ github.workspace }}/openlisem_bmi/build
+          # So test_alias_table_matches_cpp_source can check ALIASES against kAlias (its real
+          # source of truth) even though tests run from a copy outside the repo below.
+          LISEM_BMI_CPP_SRC: ${{ github.workspace }}/openlisem_bmi/bmi_lisem/BmiLisem.cpp
         run: |
           set -e
           # Copy the tests OUT of the repo and run them from there. This is the
