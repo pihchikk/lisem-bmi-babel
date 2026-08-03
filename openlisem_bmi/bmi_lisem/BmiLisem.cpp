@@ -65,7 +65,13 @@ void BmiLisem::Initialize(std::string config_file)
         throw std::runtime_error("BmiLisem::Initialize: runfile not found: " + config_file);
 
     model->Initialize();   // InitializeStatic + SnapshotInitialState + scalar resets
-    model->avgTheta();     // initialise ThetaI*a so they are valid at t0
+    // avgTheta() dereferences SoilDepth1/SoilDepth2/SoilDepth3, which are only
+    // ever allocated inside lisDataInit.cpp's "InfilMethod != INFIL_SWATRE"
+    // block -- calling it unconditionally null-derefs under SWATRE. Mirrors
+    // the guard native LISEM already uses at both its own avgTheta() call
+    // sites (lisReportmaps.cpp's ReportMaps()), not a new policy.
+    if (model->SwitchInfiltration && model->InfilMethod != INFIL_SWATRE)
+        model->avgTheta();     // initialise ThetaI*a so they are valid at t0
     recomputeSurfaceStorage();  // initialise _surfaceStorageVolume so it's valid at t0
 
     buildVarRegistry();    // maps are allocated now — wire standard names to them
@@ -285,7 +291,9 @@ void BmiLisem::Update()
     if (!model)
         throw std::runtime_error("BmiLisem::Update: not initialized");
     model->Update();
-    model->avgTheta();   // keep ThetaI*a current for BMI reads
+    // See Initialize()'s comment: avgTheta() is not SWATRE-safe.
+    if (model->SwitchInfiltration && model->InfilMethod != INFIL_SWATRE)
+        model->avgTheta();   // keep ThetaI*a current for BMI reads
     recomputeSurfaceStorage();  // keep _surfaceStorageVolume current for BMI reads
 }
 
@@ -297,8 +305,10 @@ void BmiLisem::UpdateUntil(double time)
         if (!model->Update())
             break;
     }
-    model->avgTheta();   // refresh ThetaI*a so post-event soil moisture is
-                         // current for BMI reads (Update() does this per-step)
+    // See Initialize()'s comment: avgTheta() is not SWATRE-safe.
+    if (model->SwitchInfiltration && model->InfilMethod != INFIL_SWATRE)
+        model->avgTheta();   // refresh ThetaI*a so post-event soil moisture is
+                             // current for BMI reads (Update() does this per-step)
     recomputeSurfaceStorage();  // same reasoning, for _surfaceStorageVolume
 }
 

@@ -656,7 +656,12 @@ void TWorld::InitSoilInput(void)
 
     LandUnit = ReadMap(LDD,getvaluename("landunit"));  //VJ 110107 added
     ThetaI1a = NewMap(0); // used for screen output
-    ThetaI2a = NewMap(0); // for output, average soil layer 2
+    // ThetaI2a allocated below, inside "if (SwitchTwoLayer)", mirroring
+    // ThetaI3a/SwitchThreeLayer -- allocating it here unconditionally meant
+    // it was always advertised via the BMI registry even when SwitchTwoLayer
+    // was false (1-layer Green & Ampt, or SWATRE), where nothing ever writes
+    // to it: avgTheta()'s layer-2 update is itself gated on SwitchTwoLayer,
+    // so the variable read exactly 0.0 for the entire run in both cases.
 
     // if(SwitchOMCorrection)
     //     OMcorr = ReadMap(LDD,getvaluename("OMmap"));
@@ -745,6 +750,7 @@ void TWorld::InitSoilInput(void)
 
             ThetaS2 = ReadMap(LDD,getvaluename("thetaS2"));
             ThetaI2 = ReadMap(LDD,getvaluename("thetaI2"));
+            ThetaI2a = NewMap(0); // for output, average soil layer 2
             calcValue(*ThetaI2, thetaCalibration, MUL); //VJ 110712 calibration of theta
             calcMap(*ThetaI2, *ThetaS2, MIN); //VJ 110712 cannot be more than porosity
             copy(*ThetaI2a, *ThetaI2);
