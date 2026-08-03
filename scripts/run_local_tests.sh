@@ -8,8 +8,10 @@
 #      already-corrected local runfile (see README.rst's "Input data"
 #      section for why: the dataset's other .run files carry absolute paths
 #      from other environments -- WSL, a Jupyter container -- and won't
-#      resolve on this host). Override by exporting LISEM_TEST_RUNFILE
-#      yourself before calling this script.
+#      resolve on this host). That runfile must keep Include Infiltration=1
+#      (see README.rst) -- with it off, infiltration-dependent outputs are
+#      structurally zero rather than physically computed. Override by
+#      exporting LISEM_TEST_RUNFILE yourself before calling this script.
 #   3. Running from a copy of tests/ outside the repo, so `import bmi_lisem`
 #      resolves to the installed wheel (with the compiled extension) instead
 #      of being shadowed by the source tree -- see docs/BUILDING.md's

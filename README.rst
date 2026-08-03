@@ -199,6 +199,17 @@ the one runfile in that dataset with paths already corrected for this machine
 (the others use absolute paths from other environments — WSL, a Jupyter
 container — and won't resolve here).
 
+``res_test/run_test.run`` must have ``Include Infiltration=1``. It shipped
+with ``=0`` (as do 5 of the dataset's other 7 runfiles; only the working/output
+copies, ``maps/probnik_20m.run`` and ``results/probnik_20m.run``, had ``=1``).
+With infiltration off, ``TWorld::InfilEffectiveKsat()`` early-returns and every
+infiltration-dependent quantity — ``ThetaI1a``, infiltration/interception/ET/
+runoff volumes, the water-balance closure — is structurally zero for the whole
+run, not physically computed. This dataset's own ``rain.txt`` is labelled
+"fullcatch live coupling event rainfall", confirming it's meant to drive a real
+coupling event. The runfile carries an inline comment recording this; if a
+fresh copy is ever made from the dataset's other files, re-apply it.
+
 Setting this unblocks all 13 currently-skipping tests in
 ``bmi_lisem/tests/`` (``test_standard_names.py`` and
 ``test_coupling_vars.py``). **None of them need ``pcraster``** — confirmed by

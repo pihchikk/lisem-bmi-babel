@@ -234,6 +234,85 @@ class TestMetadata:
             m.finalize()
 
 
+class TestFiniteness:
+    """Finiteness invariant across every raster output, at several points in a
+    full event -- not just post-event, and not just for one variable someone
+    thought to check.
+
+    Motivated by task #118 (ThetaI1a NaN investigation): a raster variable
+    reading NaN in some cells doesn't by itself distinguish "outside the
+    catchment, by design" (LISEM's own missing-value convention -- confirmed
+    directly: for VNIIMZ_20m, exactly 11,335 of 18,156 grid cells are outside
+    the catchment and every raster output reads NaN there, consistently) from
+    "a real reporting problem". This checks that every raster output shares
+    the *same* missing-value mask, and that no output has a non-finite value
+    OUTSIDE that shared mask -- i.e. in a cell that's supposed to carry real
+    data.
+
+    Honest limitation, not papered over: this catches NaN/Inf specifically.
+    It would NOT have caught task #118's actual finding on its own -- ThetaI1a
+    inside the catchment mask was reading exactly 0.0 (a suspicious constant,
+    not a non-finite value), traced to the runfile's own `Include
+    Infiltration=0` setting short-circuiting TWorld::InfilEffectiveKsat()
+    before it ever sets Thetaeff/Poreeff away from their zero-initialized
+    default. That's a plausibility problem, not a finiteness problem; a
+    finiteness invariant is still worth having as a permanent, general check
+    for the class of bug it does catch.
+    """
+
+    @staticmethod
+    def _raster_names(m):
+        return sorted(n for n in m.get_output_var_names() if m.get_var_grid(n) == 0)
+
+    @staticmethod
+    def _read(m, name):
+        grid = m.get_var_grid(name)
+        n = m.get_grid_size(grid)
+        buf = np.empty(n, dtype=np.float64)
+        m.get_value(name, buf)
+        return buf
+
+    def _check_checkpoint(self, m, raster_names, label):
+        reference_name = raster_names[0]
+        reference_mask = np.isnan(self._read(m, reference_name))
+        for name in raster_names:
+            arr = self._read(m, name)
+            mask = np.isnan(arr)
+            assert np.array_equal(mask, reference_mask), (
+                f"[{label}] {name!r}'s missing-value mask ({mask.sum()} NaN cells) "
+                f"differs from {reference_name!r}'s ({reference_mask.sum()} NaN "
+                "cells) -- every raster output should agree on which cells are "
+                "outside the catchment"
+            )
+            finite = arr[~mask]
+            assert np.all(np.isfinite(finite)), (
+                f"[{label}] {name!r} has {np.sum(~np.isfinite(finite))} non-finite "
+                "value(s) inside the catchment mask (i.e. in a cell that's "
+                "supposed to carry real data)"
+            )
+
+    @needs_runfile
+    def test_finiteness_invariant_across_outputs(self):
+        m = _make_model()
+        try:
+            raster_names = self._raster_names(m)
+            assert raster_names, "no raster outputs to check"
+
+            self._check_checkpoint(m, raster_names, "pre-event")
+
+            end = m.get_end_time()
+            halfway = end / 2.0
+            while m.get_current_time() < halfway - 1e-9:
+                m.update()
+            self._check_checkpoint(m, raster_names, "mid-event")
+
+            while m.get_current_time() < end - 1e-9:
+                m.update()
+            self._check_checkpoint(m, raster_names, "post-event / final")
+        finally:
+            m.finalize()
+
+
 # ---------------------------------------------------------------------------
 # 2. Post-event physical correctness
 # ---------------------------------------------------------------------------
