@@ -138,15 +138,24 @@ class TestMetadata:
         heap-buffer-overflow this masked). The fix makes registry membership
         deterministic, which is what makes this a permanent, meaningful test
         rather than a coin flip.
+
+        Picks whichever candidate the CURRENT fixture actually doesn't
+        advertise, rather than hardcoding soil_water_actual_layer-3. That
+        hardcoding broke the moment a genuinely 3-layer fixture existed
+        (tiny3.run, built to demonstrate SwitchThreeLayer) -- the invariant
+        this test means to assert is "requesting a non-advertised canonical
+        name raises cleanly", not "layer-3 specifically is always inactive".
         """
         m = _make_model()
         try:
             out_vars = m.get_output_var_names()
-            name = "soil_water_actual_layer-3"
-            assert name not in out_vars, (
-                f"{name!r} unexpectedly advertised for this runfile -- pick a "
-                "different genuinely-inactive variable to keep this test meaningful"
-            )
+            candidates = [n for n in EXPECTED_UNITS if n not in out_vars]
+            if not candidates:
+                pytest.skip(
+                    "every canonical coupling variable this suite knows about is "
+                    "active for this fixture -- nothing genuinely inactive to probe"
+                )
+            name = candidates[0]
             with pytest.raises(RuntimeError):
                 m.get_var_grid(name)
             with pytest.raises(RuntimeError):
