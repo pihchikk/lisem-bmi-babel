@@ -79,6 +79,43 @@ Don't build logic downstream that assumes it keeps changing after the event's
 early stages; check `soil_layer-depth~layer-2` / `Lw` position if the actual
 evolving state matters.
 
+#### `soil_water_actual_layer-3` never updates at all — it's a frozen echo of the input map
+
+Same class of issue as layer 2, one step further: `avgTheta()` has **no
+layer-3 branch whatsoever**. The whole function (`hydro/lisPercolation.cpp`)
+only ever assigns `ThetaI1a` and, inside `if (SwitchTwoLayer)`, `ThetaI2a`.
+There is no corresponding `if (SwitchThreeLayer)` block and no assignment to
+`ThetaI3a` anywhere in that file. The only place `ThetaI3a` is ever set is
+once, at initialization (`lisDataInit.cpp`: `ThetaI3a = NewMap(0);` then
+`copy(*ThetaI3a, *ThetaI3)`), and it is never touched again for the rest of
+the run.
+
+Confirmed empirically, not inferred from the gap in the code: built a
+3-layer fixture (`bmi_lisem/tests/data/tiny/tiny3.run`, `SwitchThreeLayer`
+genuinely on) and ran a full event. `theta3_initial == theta3_final` exactly
+— bit-for-bit identical — while layer 1 and layer 2 both changed
+substantially over the same run. This isn't a "pins once the front arrives"
+degradation like layer 2; layer 3 never moves from its t=0 value regardless
+of what happens in the simulation.
+
+This matches upstream's own admission, not a defect specific to this fork:
+`openLISEM`'s changelog records 3-layer Green & Ampt support as newly added
+and explicitly untested —
+
+> 260205 - v7.4.9
+> - Added: 3-layer Green and Ampt infiltration and redistribution (not tested!)
+
+**Implication for coupling partners:** the registry fix (`a4965c4`) that
+makes `soil_water_actual_layer-3`'s presence/absence deterministic instead of
+heap-garbage-dependent is correct and now demonstrated on a real 3-layer
+config — the pointer is real, non-null, and readable. But the *value* behind
+it is not a diagnostic at all in any meaningful sense for layer 3: it is
+whatever `ThetaI3` (the initial-condition input map) held at t=0, for the
+entire run. A caller reading `soil_water_actual_layer-3` should treat it as
+equivalent to reading the initial condition map directly, not as a live
+state variable — there is currently no LISEM-exposed way to see layer 3's
+actual moisture evolution through this BMI.
+
 ### Notes on erosion scaling
 
 `TotalSoillossMap` stores cumulative soil loss in **kg per cell**.
