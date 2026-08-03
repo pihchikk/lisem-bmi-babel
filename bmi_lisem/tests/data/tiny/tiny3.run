@@ -1,23 +1,29 @@
 [openLISEM runfile version 6.0]
 
-; Tiny 10x10 synthetic catchment for CI tests / fast local iteration.
-; Built by taking a known-working runfile (VNIIMZ_20m's res_test/run_test.run)
-; as the template and retargeting paths/map filenames to this fixture, rather
-; than hand-assembling keys from documentation -- the previous scaffold's key
-; names (e.g. "Gradient=" instead of the engine's actual lookup name "grad")
-; were never reconciled against the real parser (lisRunfile.cpp) and didn't
-; initialize. This version does (verified 2026-08). Some maps this fixture
-; doesn't have a dedicated file for are aliased to an existing map that's
-; read but functionally inert given the features they'd gate are switched
-; off below (see inline notes) -- not physically meaningful, just present so
-; ReadMap() succeeds.
+; 3-layer variant of tiny.run, built to demonstrate (not just source-read-argue)
+; that soil_water_actual_layer-3 works when SwitchThreeLayer is genuinely on.
+; SwitchThreeLayer requires SwitchTwoLayer too (lisDataInit.cpp: "Nr input
+; layers"==3 sets both), so this fixture carries real layer-2 maps as well,
+; not just layer-3 -- tiny.run itself stays single-layer, untouched.
 ;
-; Paths are ABSOLUTE (host-specific: /home/claude/lisem-work/...) so this
-; drops in as LISEM_TEST_RUNFILE the same way as VNIIMZ_20m's fixture, with
-; no working-directory dependency -- matches run_local_tests.sh's convention
-; of running pytest from a temp copy of tests/, not from this directory.
-; If this repo is ever cloned elsewhere, these paths need updating (same
-; caveat as VNIIMZ_20m's res_test/run_test.run).
+; Layer values are SYNTHETIC and PLAUSIBLE, not measured field data -- picked
+; to give a physically sensible profile shape (permeability and porosity both
+; decrease with depth; antecedent moisture increases with depth), not to
+; reproduce any real catchment. The point is exercising the 3-layer code
+; path, not modeling a real place. See the layer-1/2/3 map files
+; (ksat{1,2,3}.map etc.) for the exact numbers.
+;
+; NOTE: SoilDepth1's raw map value was fixed here (500.0, i.e. 500mm) --
+; tiny.run's original soildepth1.map held 0.5, which the engine reads as
+; MILLIMETERS and divides by 1000 (lisDataInit.cpp), so the original fixture
+; was silently running with a soil depth of 0.5mm, not 0.5m, on
+; soil_layer-depth~layer-1. Confirmed directly via get_value(), not assumed.
+; Left as a separate, plainly-reported finding -- not fixed in tiny.run
+; itself as part of this change, since that fixture's own behavior (23/26
+; suite pass) was already reported under the old value and changing it
+; without re-verifying is out of scope here.
+;
+; Paths are ABSOLUTE (host-specific), same convention as tiny.run.
 
 [Input]
 Map Directory=/home/claude/lisem-work/lisem-bmi-babel/bmi_lisem/tests/data/tiny
@@ -28,7 +34,7 @@ satImage File=
 mpegexe Directory=
 
 [Output]
-Result Directory=/home/claude/lisem-work/lisem-bmi-babel/bmi_lisem/tests/data/tiny/out
+Result Directory=/home/claude/lisem-work/lisem-bmi-babel/bmi_lisem/tests/data/tiny/out3
 Main results file=totals.csv
 Total Series file=totalseries.csv
 Filename point output=hydrographs.csv
@@ -108,7 +114,7 @@ Dynamic crusting=0
 Impermeable sublayer=0
 Use one matrix potential=0
 Initial matrix potential=-100
-Nr input layers=1
+Nr input layers=3
 Psi user input=0
 Swatre profile file=profile.inp
 Swatre table directory=
@@ -266,10 +272,6 @@ Advanced Options=0
 [map names]
 
 [Rainfall]
-; ID/IDGauges gate rain-zone lookup for the non-satellite rainfall path, read
-; unconditionally regardless of "Rainfall ID interpolation" -- aliased to
-; landunit.map (a valid full-catchment map); this fixture has one rain
-; station, so the actual zone values in this map are never used.
 ID=landunit.map
 IDGauges=landunit.map
 ETID=landunit.map
@@ -279,23 +281,15 @@ dem=dem.map
 grad=grad.map
 ldd=ldd.map
 outlet=outlet.map
-; outpoint is read unconditionally (point-output locations); aliased to the
-; same outlet map since this fixture only cares about the single outlet.
 outpoint=outlet.map
-; flowboundary is read unconditionally when Flow Boundary 2D=1; aliased to
-; outlet.map as a placeholder -- not semantically meaningful, just present.
 flowboundary=outlet.map
 
 [Landuse]
 landunit=landunit.map
 cover=per.map
-; litter is read unconditionally even with Include litter interception=0;
-; aliased to per.map (Include Interception=0 anyway, so its values are inert).
 litter=per.map
 lai=lai.map
 ch=ch.map
-; smax (interception storage capacity) read unconditionally; aliased to
-; ch.map -- inert since Include Interception=0.
 smax=ch.map
 
 [Surface]
@@ -321,11 +315,26 @@ thetas1=thetas1.map
 thetai1=thetai1.map
 soildep1=soildepth1.map
 
+[2nd layer Green&Ampt/Smith&Parlange]
+ksat2=ksat2.map
+; psi2/psi3 are only ReadMap()'d when Psi user input=1; here it's 0, so these
+; are never actually read -- aliased to psi1.map defensively rather than left
+; pointing at nonexistent files.
+psi2=psi1.map
+thetas2=thetas2.map
+thetai2=thetai2.map
+soildep2=soildepth2.map
+
+[3rd layer Green&Ampt/Smith&Parlange]
+ksat3=ksat3.map
+psi3=psi1.map
+thetas3=thetas3.map
+thetai3=thetai3.map
+soildep3=soildepth3.map
+
 [Erosion]
 coh=coh.map
 cohadd=cohadd.map
 aggrstab=aggrstab.map
 d50=d50.map
-; d90 read unconditionally alongside d50; aliased to d50.map (no separate
-; d90 map in this fixture).
 d90=d50.map

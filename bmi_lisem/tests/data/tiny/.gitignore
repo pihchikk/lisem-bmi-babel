@@ -1,3 +1,8 @@
 # Generated PCRaster inputs (produced by make_tiny.py); do not commit binaries.
 *.map
 out/
+out3/
+# Some LISEM report outputs (e.g. totals.csv) resolve relative to CWD at run
+# time rather than Result Directory and can land here directly, not just in
+# out/.
+*.csv
