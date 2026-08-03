@@ -322,7 +322,16 @@ class TestPostEventValues:
 
     @needs_runfile
     def test_actual_theta_differs_from_initial(self):
-        """Post-event θ (layer 1) should be wetter than initial θ where rain fell."""
+        """Post-event θ (layer 1) should be wetter than initial θ where rain fell.
+
+        Excludes the out-of-catchment mask before checking finiteness -- those cells
+        read NaN by design (every raster output shares that mask; see TestFiniteness,
+        which confirms it directly). Checking the raw array without excluding the mask
+        was mistaking LISEM's own missing-value convention for a bug (task #118): the
+        real problem that investigation found was a suspicious-but-finite constant
+        (0.0) inside the mask, not a non-finite value, which is why this needed a
+        separate, explicit mask rather than a plain isfinite() check.
+        """
         m = _make_model()
         try:
             out_vars = set(m.get_output_var_names())
@@ -335,13 +344,20 @@ class TestPostEventValues:
 
             theta1_flat = _read(m, "soil_water_actual_layer-1")
 
-            # Must be finite and within [0, 1]
-            assert np.all(np.isfinite(theta1_flat)), "post-event θ1a contains non-finite values"
-            assert np.all(theta1_flat >= 0), "post-event θ1a contains negative values"
-            assert np.all(theta1_flat <= 1), "post-event θ1a contains values > 1"
+            # Same masking approach as TestFiniteness: derive the missing-value mask
+            # from the array itself rather than assuming a shape, then only assert
+            # inside it.
+            catchment_mask = ~np.isnan(theta1_flat)
+            theta0_in = theta0_flat[catchment_mask]
+            theta1_in = theta1_flat[catchment_mask]
+
+            # Must be finite and within [0, 1] inside the catchment
+            assert np.all(np.isfinite(theta1_in)), "post-event θ1a contains non-finite values inside the catchment mask"
+            assert np.all(theta1_in >= 0), "post-event θ1a contains negative values"
+            assert np.all(theta1_in <= 1), "post-event θ1a contains values > 1"
 
             # At least somewhere the moisture should have increased
-            assert np.any(theta1_flat > theta0_flat + 1e-6), (
+            assert np.any(theta1_in > theta0_in + 1e-6), (
                 "post-event θ1a is not larger than initial θ1 anywhere — "
                 "likely avgTheta() not called or no infiltration occurred"
             )
@@ -356,8 +372,18 @@ class TestPostEventValues:
         same way for display (lisReportmaps.cpp:147-148, qMax(0,.)/qMin(0,.)). This test used
         to assert the raw value is non-negative, which is wrong (deposition-heavy cells are
         expected to read negative); it now checks the erosion *component* -- what the test
-        name actually asks about -- via that same qMax(0,.) split, and confirms real
-        detachment happened somewhere in the event rather than the split being vacuously true.
+        name actually asks about -- via that same qMax(0,.) split.
+
+        The "detachment must have happened somewhere" expectation is conditional on runoff
+        actually occurring, not assumed outright. This is the second test in this suite that
+        passed vacuously on a config where the underlying process was structurally silenced --
+        the first was test_coupling_vars_in_output_list assuming a layer-3 that legitimately
+        isn't always registered. Here, with Include Infiltration=1 (see README.rst), essentially
+        all rainfall on VNIIMZ_20m infiltrates and runoff is ~zero; with no surface flow, zero
+        detachment everywhere is the physically correct outcome, not a bug -- flow shear is what
+        drives splash/flow detachment in the first place. So the test now branches on whether
+        runoff actually occurred: no runoff -> erosion must be exactly zero (and finite); real
+        runoff -> some detachment is expected, as before.
         """
         m = _make_model()
         try:
@@ -373,14 +399,28 @@ class TestPostEventValues:
 
             erosion_component = np.maximum(valid, 0.0)
             deposition_component = np.minimum(valid, 0.0)
-            assert np.any(erosion_component > 0), (
-                "no cell shows net erosion (all non-negative kg/m² values are exactly 0) -- "
-                "expected some detachment somewhere in a full event"
-            )
-            assert np.any(deposition_component < 0), (
-                "no cell shows net deposition -- expected on VNIIMZ_20m; if this genuinely "
-                "changed, the split may no longer be the right shape of check for this fixture"
-            )
+
+            rain = _read(m, "surface-water~rainfall_volume")[0]
+            runoff = _read(m, "surface-water~runoff_volume")[0]
+            runoff_occurred = runoff > 1e-6 * max(abs(rain), 1e-12)
+
+            if not runoff_occurred:
+                assert np.all(erosion_component == 0.0), (
+                    f"runoff is ~zero (runoff={runoff:.4g} m3, rain={rain:.4g} m3) but some "
+                    "cell still shows net erosion -- detachment without surface flow is "
+                    "unexpected"
+                )
+            else:
+                assert np.any(erosion_component > 0), (
+                    f"runoff occurred (runoff={runoff:.4g} m3) but no cell shows net erosion "
+                    "(all non-negative kg/m² values are exactly 0) -- expected some detachment "
+                    "somewhere given real surface flow"
+                )
+                assert np.any(deposition_component < 0), (
+                    "no cell shows net deposition -- expected on VNIIMZ_20m when runoff "
+                    "occurred; if this genuinely changed, the split may no longer be the right "
+                    "shape of check for this fixture"
+                )
         finally:
             m.finalize()
 
