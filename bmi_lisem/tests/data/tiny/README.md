@@ -31,11 +31,27 @@ Both runfiles have been confirmed end-to-end against the real built engine:
 `initialize()` → full `update()` loop → `finalize()`, with the actual
 `bmi_lisem` pytest suite run against each via `LISEM_TEST_RUNFILE`.
 
-- `tiny.run`: 23 passed / 2 skipped (own-map cross-check tests skip because
-  this fixture's runfile doesn't have `OutRunoff`/etc enabled to write those
-  maps -- unrelated to the fixture's own correctness) / 1 xfailed (balance
-  residual ~20% on this toy catchment -- expected, matches the documented
-  unaccounted-terms list in `COUPLING_VARS_LEDGER.md`).
+- `tiny.run`: 26/26 pass (2 own-map cross-check tests skip because this
+  fixture's runfile doesn't have `OutRunoff`/etc enabled to write those maps
+  -- unrelated to the fixture's own correctness). **Re-checked after the
+  `soildepth1` unit fix below, not assumed unchanged**: with the fixture's
+  original (buggy) 0.5mm layer-1 depth, `test_balance_closure` was
+  dynamically `xfail`ing at a genuine 20.29% residual -- confirmed via a
+  direct side-by-side run that this residual was *caused by the depth bug*
+  itself (a ~0.5mm layer saturates almost instantly regardless of how little
+  actually infiltrated, so the model backed excess water up as surface
+  storage rather than infiltrating it: `infil=0.658m3, dsurface_storage=0.159m3`
+  out of `rain=1.025m3`), not by the generic unaccounted-terms list this
+  README previously (incorrectly) attributed it to. Same side-by-side run
+  showed `test_actual_theta_differs_from_initial` was also vacuous under the
+  bug: `theta1` jumped straight to `thetas1` (0.45, full saturation) for
+  *any* nonzero infiltration, because the wetting front trivially exceeded a
+  0.5mm-deep layer. With the corrected 500mm depth, both are now real:
+  `test_balance_closure` closes exactly (rain=infil=1.025m3, everything else
+  0, residual=0.0000%, and the dynamic xfail branch no longer triggers --
+  it's a genuine `PASSED`, not an `XPASS`), and `test_actual_theta_differs_from_initial`
+  shows a modest, physically plausible wetting response (0.200 -> 0.220),
+  not a trivial jump to saturation.
 - `tiny3.run`: 25 passed / 1 failed. The one failure
   (`test_inactive_variable_raises_cleanly`) is the test's own hardcoded
   assumption that `soil_water_actual_layer-3` is always inactive -- true for
@@ -86,9 +102,19 @@ intended as 0.5m, but the engine reads `SoilDepthN` maps in **millimeters**
 (`lisDataInit.cpp` divides by 1000 on read) -- so `tiny.run` was silently
 running with a 0.5**mm** layer-1 depth, not 0.5m, this whole time. Confirmed
 via `get_value("soil_layer-depth~layer-1")` returning `0.0005`. Fixed to
-`500.0` (mm). This does not change any of `tiny.run`'s already-reported pass
-counts (they were passing regardless), but the *physics* those passes
-exercised had an effectively negligible soil-1 layer depth throughout.
+`500.0` (mm).
+
+This one *did* change `tiny.run`'s behavior, not just its physics --
+confirmed via a direct side-by-side comparison (buggy 0.5mm map vs. the
+fixed 500mm map, same fixture, same event), not assumed: at the old depth,
+`test_balance_closure` was `xfail`ing at a genuine 20.29% residual, and
+`test_actual_theta_differs_from_initial` was passing on a trivial jump
+straight to `thetas1` (full saturation) for any nonzero infiltration -- both
+were vacuous in the same class as the registry bug and `Include
+Infiltration=0` earlier in this project. At the corrected depth, both are
+real: the balance closes exactly and the theta response is a modest,
+physically plausible wetting, not a saturation jump. See "Status: verified
+working" above for the numbers.
 
 Layer-2/3 values are synthetic and plausible (permeability and porosity
 decrease with depth, antecedent moisture increases with depth) -- picked to
