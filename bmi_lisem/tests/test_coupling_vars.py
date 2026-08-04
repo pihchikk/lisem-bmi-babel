@@ -625,6 +625,103 @@ class TestSoilMoistTotIsDeadCode:
             m.finalize()
 
 
+class TestStaleness:
+    """Every advertised output variable should either change over the course of a real
+    event, or be on an explicit allowlist of variables known to be legitimately static
+    for the current run (soil parameters, layer depths, dead code, or a switch that's
+    off in every fixture this project has). Neither the readability invariant
+    (test_every_advertised_output_var_is_readable) nor the finiteness invariant
+    (TestFiniteness) can see "reads fine, is finite, but never changes" -- that's
+    exactly the shape of three separate defects found in this project: the frozen
+    soil_water_actual_layer-3 echo, the pre-fix soil_water_actual_layer-2 (always
+    exactly 0.0 whenever SwitchTwoLayer was false), and the ALIASES table pointing a
+    legacy name at a dead scalar. This is the assertion that would have caught all
+    three directly, without anyone needing to think to check each one by name.
+
+    Deliberately a two-point check (initialize() vs. end of run), not a full
+    per-timestep trace -- matches what was asked for and is enough to catch "never
+    updated at all", the actual shape of every defect this test class is modeled on.
+
+    Checked directly against all five fixtures in this project (not assumed to
+    generalize), 2026-08: res_test/run_test.run, results_test/run_test.run,
+    tiny.run, tiny3.run, tiny_swatre.run.
+    """
+
+    # Structurally static: never touched after initialization, by design, documented
+    # elsewhere. Frozen on every fixture that advertises them.
+    STRUCTURAL_ALLOWLIST = {
+        # Constant per-cell soil-depth maps.
+        "soil_layer-depth~layer-1",
+        "soil_layer-depth~layer-2",
+        "soil_layer-depth~layer-3",
+        # ThetaI1 initial-condition input map, echoed as-is, never recomputed --
+        # see COUPLING_VARS_LEDGER.md's "Notes on soil moisture".
+        "soil_water_actual",
+        # avgTheta() has no layer-3 update path at all -- frozen echo of ThetaI3
+        # whenever advertised (3-layer configs). See COUPLING_VARS_LEDGER.md's
+        # "never updates at all" section. Deliberately NOT extended to layer-2:
+        # soil_water_actual_layer-2 is only ever advertised when SwitchTwoLayer is
+        # true (post the ThetaI2a allocation fix), and it IS live whenever it's
+        # advertised -- if it ever freezes again, this test should catch it, not
+        # wave it through.
+        "soil_water_actual_layer-3",
+        # SoilMoistTot: dead code, SoilMoistDiff (the only thing ever added to it)
+        # is never populated -- see TestSoilMoistTotIsDeadCode above, an existing,
+        # separately-documented contract, not a new finding here.
+        "soil_water~storage_volume",
+    }
+
+    # Zero because the responsible switch is off in every fixture this project has
+    # (Include ET=0, Include Interception=0 everywhere) -- correctly zero given that,
+    # but genuinely unverified when the switch is on, since no fixture exercises that
+    # path. Flagged here explicitly rather than silently folded into the structural
+    # list above.
+    SWITCHED_OFF_EVERYWHERE_ALLOWLIST = {
+        "surface-water~evapotranspiration_volume",
+        "surface-water~interception_volume",
+    }
+
+    # Zero-activity on some fixtures (a gentle/tiny event fully infiltrates, or
+    # generates no measurable runoff), but confirmed genuinely live and moving on
+    # results_test/run_test.run specifically -- so a fixture with more rainfall MUST
+    # show these actually changing; this allowlist only covers the "no activity
+    # this event" case, not "can never move".
+    ZERO_ACTIVITY_ALLOWLIST = {
+        "soil_erosion~mass-per-area",
+        "surface-water~depth",
+        "surface-water~runoff_amount",
+        "surface-water~runoff_volume",
+        "surface-water~storage_volume",
+        "water~channel_discharge",
+    }
+
+    STATIC_ALLOWLIST = STRUCTURAL_ALLOWLIST | SWITCHED_OFF_EVERYWHERE_ALLOWLIST | ZERO_ACTIVITY_ALLOWLIST
+
+    @needs_runfile
+    def test_no_unexpected_frozen_outputs(self):
+        m = _make_model()
+        try:
+            names = sorted(m.get_output_var_names())
+            initial = {name: _read(m, name) for name in names}
+
+            _run_to_end(m)
+
+            frozen = [
+                name for name in names
+                if np.array_equal(initial[name], _read(m, name), equal_nan=True)
+            ]
+            unexpected = sorted(set(frozen) - self.STATIC_ALLOWLIST)
+            assert not unexpected, (
+                f"variable(s) advertised as output but bit-identical from initialize() "
+                f"to end of run, not on the known-static allowlist: {unexpected} -- "
+                "either this is a newly-frozen variable (investigate and fix, or add "
+                "to the allowlist with a documented reason in COUPLING_VARS_LEDGER.md "
+                "and here), or the registry is advertising something nothing fills."
+            )
+        finally:
+            m.finalize()
+
+
 class TestPerCellRainfallRunoff:
     """`surface-water~rainfall_amount`/`surface-water~runoff_amount` (grid 0, metres) verified
     against LISEM's own map-file output for the identical run -- not just checked for existing and

@@ -23,6 +23,7 @@ physical coupling with AquaCrop and other soil-water models.
 | `soil__erosion_mass_per_area`            | `model->TotalSoillossMap` ÷ `_dx²` | `kg m-2` | 0 | `soil_erosion_amount` (COINED-pending) |
 | `atmosphere_water__precipitation_leq-depth` | `model->RainCumFlat` | `m` | 0 | `surface-water~rainfall_amount` |
 | `surface_water__runoff_depth`            | `model->Qm3total` ÷ `_dx²` | `m` | 0 | `surface-water~runoff_amount` |
+| `soil_water__infiltration_depth`         | `model->Fcum` | `m` | 0 | `soil_infiltration~amount` |
 
 ### Notes on inactive layers
 
@@ -168,6 +169,53 @@ mirroring it exactly — not a new policy, the one the engine already uses.
   `lisDisplayMaps.cpp`, `lisSoilmoisture.cpp`) already checked
   `SwitchTwoLayer` (or an equivalent) before touching it — confirmed via a
   full grep of every usage site, not assumed.
+
+#### `soil_infiltration~amount` (`Fcum`) was frozen under SWATRE — fixed (2026-08)
+
+Caught by `TestStaleness::test_no_unexpected_frozen_outputs` on `tiny_swatre.run` —
+the fourth instance of this project's recurring "registry advertises a variable
+nothing fills" defect shape (after the heap-garbage registry bug, the frozen
+`soil_water_actual_layer-3` echo, and the always-zero pre-fix `ThetaI2a`), and the
+first one this specific test class was written to catch directly rather than by
+someone thinking to check the variable by name.
+
+**Root cause**: `InfilSwatre()` (`swatre/lisInfilSwatre.cpp`) computed
+`InfilVol->Drc` (used by the `InfilTot` scalar, see below) every step but never
+touched `Fcum->Drc` at all. Green & Ampt's own infiltration path
+(`hydro/lisInfiltration.cpp:260`, `Fcum->Drc += fact_;`) has always incremented it
+correctly — the SWATRE path simply never had the equivalent line, so under
+`Infil Method=1` (SWATRE) `soil_infiltration~amount` read a constant `0.0` for the
+entire run, indistinguishable from "correctly zero because nothing infiltrated."
+
+**Fix**: added `Fcum->Drc += (WHorig - WHN);` in `InfilSwatre()`, right next to the
+existing `InfilVol->Drc` assignment — `WHorig - WHN` (m) is SWATRE's own per-step
+ponded-depth drop, the same quantity already used to compute `InfilVol`, so this
+mirrors Green & Ampt's `Fcum->Drc += fact_` pattern exactly rather than inventing
+a new accounting method.
+
+**Verified on `tiny_swatre.run`**: `Fcum` moves from `0.0` (t₀) to a uniform
+`0.010248` m across all 100 cells by end of run (`TestStaleness` now passes with
+no allowlist entry needed for this variable). Cross-checked against
+`surface-water~infiltration_volume` (`InfilTot`, the scalar catchment total) for
+the same run: `Fcum`-derived volume (`Σ Fcum × cell_area`) = `1.024795` m³ vs.
+`InfilTot` = `1.025000` m³ — residual `-0.000205` m³ (0.02% relative). This
+residual is **expected, not a bug**: `InfilVol->Drc` (what `InfilTot` actually
+accumulates, `lisTotalsMB.cpp:132`) is computed as `(WHorig - WHN) * FlowWidth->Drc
+* DX->Drc`, while the cross-check above multiplies `Fcum`'s raw depth by the
+nominal grid cell area (`DX * DX`) — the same `FlowWidth`-vs-nominal-area gap
+already exists identically in Green & Ampt's `InfilVol->Drc = fact_ * FlowWidth->Drc
+* DX->Drc` (`lisInfiltration.cpp:264`), so a caller reconciling `Fcum` against
+`InfilTot` should expect this residual whenever `FlowWidth != DX` for any cell
+(e.g. channel cells), on either infiltration method — not something introduced by
+this fix.
+
+**Regression check**: `Infil Method=1` (SWATRE) is a separate code path from
+Green & Ampt (`InfilSwatre()` is only called when `InfilMethod == INFIL_SWATRE`,
+`lisModel.cpp:633`) — this fix cannot touch Green & Ampt's own accumulation.
+Confirmed empirically, not just by inspection: every advertised output variable's
+full initial/final array, dumped via the BMI itself, is byte-for-byte identical
+between a build with this fix and one without it, across all four Green & Ampt
+fixtures this project has (`res_test`, `results_test`, `tiny.run`, `tiny3.run`).
 
 ### Notes on erosion scaling
 

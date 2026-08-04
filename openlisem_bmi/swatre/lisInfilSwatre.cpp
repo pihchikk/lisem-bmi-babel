@@ -165,6 +165,7 @@ void TWorld::InfilSwatre()
      //           qDebug() << r << c << WHorig << WHN << (WHorig - WHN) << fractionImperm->Drc << FlowWidth->Drc;
     //        InfilVol->Drc = qMax(0.0, WHorig - WHN) * FlowWidth->Drc * DX->Drc;
             // use flowwidth because impermeable is done separately
+            Fcum->Drc += (WHorig - WHN); // cumulative infil in m, mirrors G&A's Fcum->Drc += fact_ in lisInfiltration.cpp
 
             ThetaI1a->Drc = theta;
             Perc->Drc = perc/_dt; //from m to m/sec
