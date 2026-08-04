@@ -25,16 +25,8 @@ include_directories(${Qt6Gui_INCLUDE_DIRS})
 include_directories(${Qt6Network_INCLUDE_DIRS})
 
 # Add definitions for Qt 6
-add_definitions(${Qt6Widgets_DEFINITIONS})
-add_definitions(${Qt6Core_DEFINITIONS})
-add_definitions(${Qt6Gui_DEFINITIONS})
-add_definitions(${Qt6Network_DEFINITIONS})
 
 # Add compile flags for Qt 6
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Qt6Widgets_EXECUTABLE_COMPILE_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Qt6Core_EXECUTABLE_COMPILE_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Qt6Gui_EXECUTABLE_COMPILE_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Qt6Network_EXECUTABLE_COMPILE_FLAGS}")
 
 set(CMAKE_CXX_FLAGS_COVERAGE "${CMAKE_CXX_FLAGS_RELEASE} -fprofile-arcs -ftest-coverage")
 
