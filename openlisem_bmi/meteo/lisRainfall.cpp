@@ -628,7 +628,14 @@ double TWorld::getmaxRainfall()
 // go from ddd:mmmm string to seconds double
 double TWorld::getTimefromString(QString sss)
 {
-    double day = 0;
+    // day defaults to 1, not 0: Begin time/End time (lisModel.cpp) require "ddd:mmmm" and
+    // subtract 1 from the parsed day before use (so "001:..." means day-index 0). A bare,
+    // colon-less value here must default to that same day-index-0 reference point, i.e.
+    // day=1 before the (day-1) below -- day=0 would silently place every rainfall record a
+    // full 86400 seconds before the simulation's own clock ever starts, with no error at
+    // all: every rainfall-dependent output reads exactly zero for the whole run. Confirmed
+    // exactly this failure mode on two real legacy datasets before this fix.
+    double day = 1;
     double min = 0;
     bool ok;
 
@@ -637,7 +644,7 @@ double TWorld::getTimefromString(QString sss)
         day = DHM.at(0).toDouble(&ok);
         min = DHM.at(1).toDouble(&ok);
     } else
-        min = sss.toDouble(&ok); // if no ":" char assume everything is minutes
+        min = sss.toDouble(&ok); // if no ":" char assume everything is minutes, day 1
 
     if (!ok) {
         ErrorString = QString("Unreadable value in time series record: %1").arg(sss);

@@ -369,3 +369,111 @@ VNIIMZ_20m test config (previously `xfail`'d) — see that test for the current 
 includes `soil_water~storage_volume` and `surface-water~storage_volume` as two separate terms rather
 than one mislabeled one. If a *different* runfile still shows a residual above tolerance, check
 which of the above still-unaccounted terms is significant for it before assuming a new defect.
+
+## External real-world datasets: compatible, not incompatible (2026-08)
+
+**Correction to the record**: an earlier conclusion that no compatible external dataset exists — not
+written down anywhere, so there is no document to edit, only this correction to make — was drawn from
+testing 2 of the 6 datasets openLISEM's own upstream project publishes as examples (SourceForge).
+Both of the two originally tried failed, and the failure was read as a format-compatibility verdict.
+It wasn't: both failures were the *same* parser bug (`KE parameters EQ1/EQ2/EQ3`, below), not a
+property of the format or the datasets. Testing all 6 (`Ganspoel_Hydrology`, `Dijkring41_Flood`,
+`StLucias_DebrisFlood`, `Sicily_DebrisFlow`, `StLucia_FlashFlood`, `test_lake`) after fixing that one
+bug, all 6 initialize/update/finalize cleanly — none needed anything beyond a runfile/rainfall-file
+format port (the same class of work already done for `VNIIMZ_20m`). `Dijkring41_Flood` in particular
+is a real 875×625 (546,875-cell) flood-hazard domain — a genuine scale test roughly 30× larger than
+anything else exercised in this project, reached only because the original 2-dataset sample happened
+not to include it.
+
+These datasets declare `[openLISEM runfile version 1.0]` — a materially older schema than the
+`version 6.0` runfiles this project otherwise uses (different section layout entirely: a unified
+`[General options]` block, `[Surface Flow]`/`[Debris Flow]`/`[OpenGL visualization]` sections with no
+`version 6.0` equivalent). The version number itself is never read by the engine (the parser just
+splits on `=`, ignoring any line without it); what actually breaks porting a `version 1.0` runfile
+forward is entirely in the specific findings below.
+
+### Fixed: `KE parameters EQ1/EQ2/EQ3` crashed the whole process on legacy input
+
+All six datasets hit an identical crash on first attempt — confirmed via `gdb` backtrace to
+`TWorld::ParseRunfileData()`. `KE parameters EQ1/EQ2/EQ3` are split on `;` and indexed
+(`param[0..3]`) with no bounds check. Legacy runfiles write these **comma**-separated
+(`1,8.950,0.520,0.042`); splitting that on `;` returns a 1-element list, and the very first indexed
+access is out of range — a hard Qt assert (`abort()`), not a catchable exception. A malformed or
+merely differently-delimited value here killed the entire host process, unacceptable for a coupled
+run regardless of these specific datasets.
+
+**Fixed** (`lisRunfile.cpp`): each of the three blocks now checks `param.count()` against the number
+of fields it's about to read (4 for EQ1, 3 for EQ2/EQ3) and throws a clear, catchable `ErrorString`
+naming the value and its actual field count if the check fails, instead of indexing blindly. Verified
+directly: a runfile with the original comma-separated value now raises a Python `RuntimeError` with
+an actionable message instead of aborting the process.
+
+### Fixed: rainfall day-index mismatch — a silent wrong-answer bug, not a crash
+
+One further rainfall-file format variant (plain floating-point minutes, no `ddd:` prefix — e.g.
+`0.00`, `5.00`) initializes and runs to completion with **no error at all**, but every
+rainfall-dependent output reads exactly `0.0` for the entire run. Root cause, in
+`TWorld::getTimefromString()` (`meteo/lisRainfall.cpp`): the no-colon fallback defaulted `day` to
+`0`, while `Begin time`/`End time` (`lisModel.cpp`) require the `ddd:mmmm` form and subtract 1 from
+the parsed day before use (so `Begin time=001:0000` means day-index 0). A rainfall record with no
+colon therefore landed at day-index `-1` in the same formula — a full 86,400-second offset that puts
+every rainfall timestamp permanently outside the simulation's live clock window. Caught only by
+checking that a real, documented storm total (103mm) actually showed up as non-zero
+`surface-water~rainfall_amount` — nothing about the run itself signaled anything was wrong.
+
+**Fixed**: the no-colon fallback now defaults `day = 1`, matching the same day-index-0 reference
+point `Begin time`/`End time` already use. Verified directly against the original, unmodified legacy
+rainfall file (no format conversion needed once this fix is in): `surface-water~rainfall_amount`
+reads non-zero and, over a full run, matches the source file's own documented total exactly (103.8mm
+computed vs. "103mm" in the file's own header comment). This fix covers the `StLucia_FlashFlood`/
+`StLucias_DebrisFlood` rainfall format specifically (plain floating-point minutes, no header line
+resembling the old format below) — their original files now work unmodified.
+
+**A separate, related finding while fixing the above**: `Ganspoel_Hydrology`/`Dijkring41_Flood` use a
+*third*, genuinely different and older rainfall-file format (`RUU CSF TIMESERIE INTENSITY NORMAL 1`
+header, a station-name line, then bare `minute\tvalue` rows) that this engine version explicitly
+intends to reject: `oldformat = (rainRecs[0].contains(" RUU")); if (oldformat) { throw "The old RUU
+rainfall file format is not longer supported."; }`. That check itself has a bug and never actually
+fires on genuine old-format files: it looks for the substring `" RUU"` — a space followed by `RUU` —
+but real files have `RUU` as the literal first word, with no leading space, so `.contains(" RUU")` is
+always `false` for them. Instead of the intended clear rejection, such a file falls through to
+new-format parsing, where the station-name line (`"station_1"`, not an integer) fails to parse as a
+station count, silently leaving `nrStations` at its default `0` and producing a confusing, unrelated
+error (`"Number of stations in rainfall file (0) < nr of rainfall zones in ID map (1)"`) instead of
+the actual problem. Not fixed (out of scope for this pass — the two datasets using this format were
+ported by converting their rainfall files to the current format instead, preserving every original
+value); flagged here since the fix would be small (match on `rainRecs[0].startsWith("RUU")` instead
+of `.contains(" RUU")`) and would turn a confusing downstream error into the clear one already written
+and evidently intended.
+
+### Found, not yet fixed: `Infil Method=0` (`INFIL_NONE`) silently runs Smith & Parlange instead of nothing
+
+Two of the six datasets (`Dijkring41_Flood`, `Sicily_DebrisFlow`) set `Infil Method=0` — the option a
+user reaches for to mean "no infiltration model" — and both showed `soil_water_actual`/
+`soil_water_actual_layer-1` drifting to physically impossible values over the course of a real run
+(12.5–32.0 and −110.5–0.283 respectively; volumetric water content must stay in 0–1). A third dataset
+using the same setting (`test_lake`, which has no rainfall at all) showed no such drift — output
+stayed frozen at a sane initial value the whole run, which is the clue that resolved this: the drift
+only appears once real rainfall/ponding actually occurs.
+
+Root cause, traced through the full call chain (`lisModel.cpp` → `cell_InfilMethods()`,
+`hydro/lisInfiltration.cpp`): nothing in this path has a dedicated branch for
+`InfilMethod == INFIL_NONE` (`model.h:154`, value `0`). The only real branch in
+`cell_InfilMethods()` is `if (InfilMethod == INFIL_GREENAMPT) {...} else { /* Smith & Parlange */ }`
+— every other value, including `INFIL_NONE`, falls into the `else` branch and runs a real Smith &
+Parlange infiltration calculation. `InfilEffectiveKsat()`'s own early-return only excludes SWATRE
+(`if (!SwitchInfiltration || InfilMethod == INFIL_SWATRE) return;`), not `INFIL_NONE` either. So
+`Infil Method=0` does not disable infiltration at all in this vendored engine version — it silently
+aliases to Smith & Parlange, using whatever Ksat/Psi/ThetaS/ThetaI values the runfile happens to
+provide, which a dataset author who deliberately set `Infil Method=0` had no reason to validate for
+that formula. Over enough timesteps this drives the wetting-front/percolation bookkeeping (which
+assumes an actively-maintained infiltration front) into physically nonsensical territory.
+
+This is the same shape as the earlier SWATRE `Fcum` gap in this ledger: a code path written for one
+configuration silently reused, unguarded, for a configuration it was never meant to handle. **Not
+yet fixed** — genuinely changes engine behavior (anyone currently relying on `Infil Method=0`
+producing *some* infiltration, accidental or not, would see that infiltration disappear), so it
+wasn't changed without checking first. The two candidate fixes are (1) an explicit early return for
+`INFIL_NONE` in `cell_InfilMethods()`, matching the existing `if (Ksateff->Drc == 0) return;` pattern,
+or (2) rejecting `Infil Method=0` outright at parse time as an unsupported value in this build, if
+`INFIL_NONE` was never meant to reach this code at all.

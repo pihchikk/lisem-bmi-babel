@@ -295,6 +295,18 @@ void TWorld::ParseRunfileData(void)
         {
             QStringList param;
             param = p.split(";",Qt::SkipEmptyParts);
+            // Legacy runfiles (pre-dating this project's semicolon convention) write these
+            // comma-separated; splitting on ";" then leaves everything in param[0], one
+            // element instead of four. Bounds-check rather than index blindly: an
+            // out-of-range QList::operator[] access here is a hard Qt assert/abort, not a
+            // catchable exception -- it kills the whole process, unacceptable for a coupled
+            // run. A clear, catchable error is strictly better than a crash either way.
+            if (param.count() < 4) {
+                ErrorString = QString("KE parameters EQ1 needs 4 semicolon-separated values "
+                    "(type;a;b;c), got %1 in \"%2\" -- old runfiles may use commas instead.")
+                    .arg(param.count()).arg(p);
+                throw 1;
+            }
             if (param[0].toInt() == 1)
                 KEequationType = KE_EXPFUNCTION;
             KEParamater_a1 = param[1].toDouble();
@@ -305,6 +317,12 @@ void TWorld::ParseRunfileData(void)
         {
             QStringList param;
             param = p.split(";",Qt::SkipEmptyParts);
+            if (param.count() < 3) {
+                ErrorString = QString("KE parameters EQ2 needs 3 semicolon-separated values "
+                    "(type;a;b), got %1 in \"%2\" -- old runfiles may use commas instead.")
+                    .arg(param.count()).arg(p);
+                throw 1;
+            }
             if (param[0].toInt() == 1)
                 KEequationType = KE_LOGFUNCTION;
             KEParamater_a2 = param[1].toDouble();
@@ -314,6 +332,12 @@ void TWorld::ParseRunfileData(void)
         {
             QStringList param;
             param = p.split(";",Qt::SkipEmptyParts);
+            if (param.count() < 3) {
+                ErrorString = QString("KE parameters EQ3 needs 3 semicolon-separated values "
+                    "(type;a;b), got %1 in \"%2\" -- old runfiles may use commas instead.")
+                    .arg(param.count()).arg(p);
+                throw 1;
+            }
             if (param[0].toInt() == 1)
                 KEequationType = KE_POWERFUNCTION;
             KEParamater_a3 = param[1].toDouble();
