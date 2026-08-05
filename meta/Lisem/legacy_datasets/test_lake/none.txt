@@ -1,0 +1,6 @@
+# no rainfall for test_lake (debris-flow initiation test, not rainfall-driven)
+2
+timestep
+1
+001:0	0.0
+001:200	0.0
