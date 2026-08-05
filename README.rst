@@ -114,6 +114,39 @@ Usage
 
 .. start-usage
 
+Quickstart with the bundled scenario
+------------------------------------
+
+No runfile of your own needed to try the BMI against a real catchment —
+``bmi_lisem.scenarios.default_scenario_runfile()`` writes a ready-to-use
+runfile for a bundled, real 20m-resolution catchment and a single real storm
+event (``meta/Lisem/vniimz_20m/``, ships with the package; see that
+directory's ``README.md`` for exactly what it is and how it was curated):
+
+.. code-block:: pycon
+
+  >>> import numpy as np
+  >>> from bmi_lisem import Lisem
+  >>> from bmi_lisem.scenarios import default_scenario_runfile
+  >>> model = Lisem()
+  >>> model.initialize(default_scenario_runfile())
+  >>> model.get_component_name()
+  'OpenLISEM'
+  >>> end = model.get_end_time()
+  >>> while model.get_current_time() < end - 1e-9:
+  ...     model.update()
+  >>> n = model.get_grid_size(model.get_var_grid("soil_infiltration~amount"))
+  >>> fcum = np.empty(n, dtype=np.float64)
+  >>> model.get_value("soil_infiltration~amount", fcum)   # cumulative infiltration, metres
+  >>> model.finalize()
+
+``default_scenario_runfile(result_dir=...)`` accepts an optional directory
+for OpenLISEM's own report outputs (totals.csv, map series); defaults to a
+fresh temporary directory if omitted.
+
+Using your own runfile
+----------------------
+
 .. code-block:: pycon
 
   >>> import numpy as np
@@ -136,7 +169,8 @@ Usage
   Runfiles reference input maps by path. Prefer **absolute paths** in the
   runfile (or run with the working directory set to the runfile's ``Map
   Directory``); relative paths are resolved against the process working
-  directory, not the runfile location.
+  directory, not the runfile location. ``default_scenario_runfile()`` above
+  already handles this for the bundled scenario.
 
 .. end-usage
 
@@ -168,7 +202,7 @@ Exposed for physical coupling (full table with sources/units in
   ``surface-water~{rainfall,interception,infiltration,evapotranspiration,storage,runoff}_volume``.
 
 Event reset (``ResetEvent`` / ``model__reset_event``)
-====================================================
+=====================================================
 
 OpenLISEM is event-based. Between rainfall events a coupler can reset the
 dynamic state (surface water, cumulative infiltration/erosion, balance totals)
@@ -179,63 +213,93 @@ scalar control variable ``model__reset_event`` (grid 1): writing any value calls
 physical variable, and is not aliased.
 
 Input data
-=========
+==========
 
 An OpenLISEM run needs a runfile plus PCRaster input maps (LDD, DEM, Ksat, mask,
-land use, cohesion, gradient, …) and a rainfall table. Set the environment
-variable ``LISEM_TEST_RUNFILE`` to an absolute runfile path to exercise the test
-suite against real data; without it (and without a bundled tiny dataset) the
-data-dependent tests are skipped.
+land use, cohesion, gradient, …) and a rainfall table. Two ready-to-use datasets
+ship in this repo, so no external download is needed to run the model or the
+test suite:
 
-**Standard local invocation, this development environment:**
+* **``meta/Lisem/vniimz_20m/``** — a real, measured 20m-resolution catchment
+  (204×89 grid, 6,821 in-catchment cells) and a single real storm event,
+  curated down to exactly the ~3.5MB of files this scenario needs. Use it via
+  ``bmi_lisem.scenarios.default_scenario_runfile()`` (see "Quickstart with the
+  bundled scenario" above) — not the template file directly, which has
+  unresolved ``{MAP_DIR}``/``{RAIN_DIR}``/``{RESULT_DIR}`` placeholders.
+  Green & Ampt infiltration (``Infil Method=3``), 2 soil layers, erosion
+  enabled. ``Include Infiltration=1`` is load-bearing here: with it ``0``,
+  ``TWorld::InfilEffectiveKsat()`` early-returns and every
+  infiltration-dependent quantity (``ThetaI1a``, infiltration/interception/ET/
+  runoff volumes, the water-balance closure) is structurally zero for the
+  whole run, not physically computed. See ``meta/Lisem/vniimz_20m/README.md``
+  for the full provenance/curation notes.
+* **``bmi_lisem/tests/data/tiny/``** — three small synthetic 10×10 catchments
+  (``tiny.run`` 1-layer Green & Ampt, ``tiny3.run`` 3-layer, ``tiny_swatre.run``
+  SWATRE), built to exercise specific code paths quickly rather than to model
+  a real place — disclosed as synthetic in that directory's own ``README.md``.
+  The ``.map`` inputs are committed directly, so these run with **no
+  ``pcraster`` dependency**. The test suite auto-detects ``tiny.run`` with
+  *zero configuration* (no environment variable needed) — see "Running the
+  tests" below.
+
+To point the test suite at a different, larger, or your own real dataset
+instead, set ``LISEM_TEST_RUNFILE`` to an absolute runfile path — this always
+takes priority over the bundled scenario.
+
+Running the tests
+=================
 
 .. code:: bash
 
-  export LISEM_TEST_RUNFILE=/home/claude/lisem-work/VNIIMZ_20m/res_test/run_test.run
+  scripts/run_local_tests.sh
 
-This points at ``VNIIMZ_20m``, a real 20m-resolution catchment (204×89 grid,
-6,821 in-catchment cells) kept outside this repo. ``res_test/run_test.run`` is
-the one runfile in that dataset with paths already corrected for this machine
-(the others use absolute paths from other environments — WSL, a Jupyter
-container — and won't resolve here).
+This is the recommended invocation — it wires up everything the test suite
+needs so nothing silently skips:
 
-``res_test/run_test.run`` must have ``Include Infiltration=1``. It shipped
-with ``=0`` (as do 5 of the dataset's other 7 runfiles; only the working/output
-copies, ``maps/probnik_20m.run`` and ``results/probnik_20m.run``, had ``=1``).
-With infiltration off, ``TWorld::InfilEffectiveKsat()`` early-returns and every
-infiltration-dependent quantity — ``ThetaI1a``, infiltration/interception/ET/
-runoff volumes, the water-balance closure — is structurally zero for the whole
-run, not physically computed. This dataset's own ``rain.txt`` is labelled
-"fullcatch live coupling event rainfall", confirming it's meant to drive a real
-coupling event. The runfile carries an inline comment recording this; if a
-fresh copy is ever made from the dataset's other files, re-apply it.
+* ``LD_LIBRARY_PATH`` → the built ``libbmilisem.so``.
+* ``LISEM_TEST_RUNFILE`` → the bundled ``vniimz_20m`` scenario by default
+  (via ``default_scenario_runfile()``), or whatever you've exported yourself.
+* Runs from a copy of ``bmi_lisem/tests/`` *outside* the repo, so
+  ``import bmi_lisem`` resolves to the installed wheel (compiled extension)
+  rather than being shadowed by the source tree — see docs/BUILDING.md's
+  "Editable installs and shadowing" section.
+* ``LISEM_BMI_CPP_SRC`` → so the alias-table sync test
+  (``test_alias_table_matches_cpp_source``) can check the Python ``ALIASES``
+  dict against ``kAlias``, its native source of truth.
 
-Setting this unblocks all 13 currently-skipping tests in
-``bmi_lisem/tests/`` (``test_standard_names.py`` and
-``test_coupling_vars.py``). **None of them need ``pcraster``** — confirmed by
-reading every test file, not assumed:
+Extra arguments pass straight through to ``pytest``, e.g.
+``scripts/run_local_tests.sh -k TestFiniteness -v``.
+
+**None of this needs ``pcraster``** — confirmed by reading every test file,
+not assumed:
 
 * Metadata and post-event-value tests only call the BMI array interface
   (``get_value``, ``get_output_var_names``, etc.) — no map I/O of any kind.
-* The two tests that do cross-check LISEM's own written ``.map`` output
+* The two tests that cross-check LISEM's own written ``.map`` output
   (``test_rainfall_amount_matches_own_rainfall_map``,
-  ``test_runoff_amount_matches_own_runoff_map``) already read it via
-  ``osgeo.gdal`` (``_read_pcraster()`` in ``test_coupling_vars.py`` — the name
-  is legacy, the implementation is pure GDAL, worked around a pip-wheel gap
-  with raw ``ReadRaster()`` bytes instead of ``ReadAsArray()``).
-* ``pcraster`` is only ever imported by ``make_tiny.py``, to generate the
-  optional synthetic ``tests/data/tiny/`` scaffold — an alternative to
-  ``LISEM_TEST_RUNFILE`` for environments with no real dataset available (e.g.
-  a from-scratch CI runner). It isn't installable from PyPI under any name
-  here, and there's no conda in this environment either, but that path isn't
-  needed at all once a real runfile is set. (It's also a dead end as shipped:
-  ``tiny.run`` uses the GUI's human-readable keys, e.g. ``Gradient=grad.map``,
-  while the engine's runfile parser looks up entries by internal variable
-  name, e.g. ``grad=grad.map`` — the same class of mismatch ``VNIIMZ_20m``'s
-  own uncorrected runfiles originally hit; see ``docs/BUILDING.md``.)
+  ``test_runoff_amount_matches_own_runoff_map``) read it via ``osgeo.gdal``
+  (``_read_pcraster()`` in ``test_coupling_vars.py`` — the name is legacy, the
+  implementation is pure GDAL).
+* ``pcraster`` is only ever imported by ``bmi_lisem/tests/data/tiny/make_tiny.py``,
+  the *generator* that originally produced ``tiny/``'s ``.map`` files — not
+  needed to use them, since they're committed. Only relevant if you change
+  ``make_tiny.py`` itself and need to regenerate its output; see that
+  directory's ``README.md``.
+
+Running without ``scripts/run_local_tests.sh`` directly against ``pytest``
+also works and needs no environment variable at all — ``tiny.run`` is
+auto-detected whenever its bundled maps are present (always true after a
+plain ``git clone``):
+
+.. code:: bash
+
+  LD_LIBRARY_PATH=openlisem_bmi/build pytest bmi_lisem/tests
+
+(subject to the same editable-install shadowing caveat as above if running
+from the repo root with an editable install).
 
 Building headless / development
-==============================
+===============================
 
 See ``docs/BUILDING.md`` for the full native build recipe (QWT + CMake steps),
 the ``-DBMI_HEADLESS=ON`` option, and the de-shadowing procedure for running the

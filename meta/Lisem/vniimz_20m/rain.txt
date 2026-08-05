@@ -1,0 +1,7 @@
+# fullcatch live coupling event rainfall (mm/h)
+2
+timestep
+1
+001:0000   77.454545
+001:0010   0
+001:0120   0

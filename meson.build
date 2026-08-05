@@ -41,6 +41,7 @@ install_pkg_srcs = [
     'bmi_lisem/__init__.py',
     'bmi_lisem/_bmi.py',
     'bmi_lisem/_version.py',
+    'bmi_lisem/scenarios.py',
 ]
 py.install_sources(
     install_pkg_srcs,

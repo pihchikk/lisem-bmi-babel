@@ -1,7 +1,9 @@
-# Generated PCRaster inputs (produced by make_tiny.py); do not commit binaries.
-*.map
+# The .map inputs themselves ARE committed (see README.md's "What is
+# committed") so the fixture runs without needing pcraster installed --
+# only the *_test-run output directories below are generated and ignored.
 out/
 out3/
+out_swatre/
 # Some LISEM report outputs (e.g. totals.csv) resolve relative to CWD at run
 # time rather than Result Directory and can land here directly, not just in
 # out/.
