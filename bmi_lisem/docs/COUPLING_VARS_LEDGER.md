@@ -477,3 +477,62 @@ wasn't changed without checking first. The two candidate fixes are (1) an explic
 `INFIL_NONE` in `cell_InfilMethods()`, matching the existing `if (Ksateff->Drc == 0) return;` pattern,
 or (2) rejecting `Infil Method=0` outright at parse time as an unsupported value in this build, if
 `INFIL_NONE` was never meant to reach this code at all.
+
+### Full 27-test suite run against all six datasets as permanent fixtures (2026-08)
+
+Each dataset run through the complete test suite (not just the one-off `initialize()`/`update()`/
+`finalize()` verification above), to check whether test assumptions written against `VNIIMZ_20m` (and
+the small `tiny*`/`res_test`/`results_test` fixtures) hold on real, independently-authored datasets
+spanning 8,800 to 546,875 cells:
+
+| Dataset | Cells | Infil | Erosion | Channels | Result | Wall time |
+|---|---|---|---|---|---|---|
+| `test_lake` | 8,800 | none (0) | off | no | 24 passed, 3 failed | 9m39s |
+| `ganspoel_hydrology` | 35,200 | Green&Ampt | on | no | 24 passed, 2 failed, 1 xfailed | 7m49s |
+| `sicily_debrisflow` | 32,200 | none (0) | on | no | 23 passed, 3 failed, 1 xfailed | 3h12m |
+| `stlucia_flashflood` | 61,517 | Green&Ampt | off | no | 21 passed, 3 failed, 2 skipped, 1 xfailed | 2h1m |
+| `stlucias_debrisflood` | 299,018 | Green&Ampt | on | yes | 24 passed, 2 failed, 1 xfailed | 14h45m |
+| `dijkring41_flood` | 546,875 | none (0) | off | no | 22 passed, 3 failed, 2 skipped | 2h38m |
+
+No test failure here is a regression from this pass's two engine fixes (KE parameters bounds check,
+rainfall day-index) — every failure below is either a pre-existing test assumption that happened to
+only ever be exercised against `VNIIMZ_20m`, or (for the `Infil Method=0` theta anomaly) the
+already-documented finding above, now confirmed on more real data. Four distinct assumption gaps
+surfaced, none fixed yet (all are test-side fragility, not engine bugs, except where noted):
+
+**Rainfall-onset-within-5-steps assumption** (`test_rainfall_and_runoff_reset_with_model_reset_event`,
+asserts `surface-water~rainfall_amount` is nonzero after exactly 5 `update()` calls) — fails on 5 of 6
+datasets (`test_lake` fails degenerately since it has no rainfall at all; `ganspoel_hydrology`,
+`sicily_debrisflow`, `stlucia_flashflood`, `stlucias_debrisflood` all fail because 5 steps cover too
+little simulated time for rain to have started yet at their timestep). Only `dijkring41_flood` passes
+it. The assumption ("5 steps is enough") was tuned to `VNIIMZ_20m`'s specific timestep/rain-onset
+timing and doesn't generalize — needs a time-based wait (e.g. step until a wall-clock/sim-time bound)
+rather than a fixed step count.
+
+**Soil-depth map not clipped to the catchment mask** (`TestFiniteness.test_finiteness_invariant_across_outputs`,
+asserts every raster output agrees on which cells are NaN) — `ganspoel_hydrology`: `soil_layer-depth~layer-1`
+has 0 NaN cells against `soil_erosion~mass-per-area`'s 24,123; `dijkring41_flood`: same variable has 0 NaN
+cells against `soil_infiltration~amount`'s 229,699. Both datasets' own `soil_layer-depth` source maps
+cover the full rectangular grid rather than being masked to the catchment outline the way most other
+raster inputs are for these two ports — a curation gap in these two datasets' `maps/` (not an engine
+bug), confirmed at both a mid-size (35,200) and the largest (546,875) domain in this set.
+
+**Erosion-off breaks the "erosion var always advertised" assumption**
+(`TestMetadata.test_coupling_vars_in_output_list`, asserts `soil_erosion~mass-per-area` is always in
+`get_output_var_names()`) — fails on both datasets in this set that have erosion off
+(`stlucia_flashflood`, `dijkring41_flood`) — 2 of 2, i.e. every erosion-off config breaks it. The
+variable is correctly absent when `Include Erosion simulation=0`; the test's own assumption that it's
+always present was never true in general, just true for every fixture used until now.
+
+**Fixed absolute runoff tolerance doesn't scale with domain** (`test_runoff_amount_matches_own_runoff_map`,
+`TOLERANCE_M3 = 0.01`) — fails on `stlucia_flashflood` (residual 0.0602949 m3) and `stlucias_debrisflood`
+(residual 0.0340201 m3), both real multi-tens-of-thousands-to-hundreds-of-thousands-cell domains with
+channels/complex routing; passes on every smaller/simpler fixture. A fixed absolute tolerance in m3
+was reasonable for `VNIIMZ_20m`'s scale but not for domains two orders of magnitude larger — needs a
+relative or domain-scaled tolerance.
+
+One further, likely-not-a-bug nuance found only on `sicily_debrisflow`: `test_erosion_finite_nonnegative`
+fails because a cell shows net erosion while computed runoff is ~zero (rain=9856 m3, runoff=0 m3) — the
+test assumed detachment requires surface flow, but rainsplash detachment from raindrop impact is a real
+mechanism independent of runoff; the test's assumption, not the engine's output, is likely what's wrong
+here.
