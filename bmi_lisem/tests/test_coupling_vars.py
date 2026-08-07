@@ -120,9 +120,22 @@ class TestMetadata:
     # OPTIONAL_LAYER_SUFFIXES above.
     SWATRE_ONLY_OPTIONAL = ("soil_layer-depth~layer-1",)
 
+    # soil_erosion~mass-per-area is only ever advertised when the runfile has erosion
+    # switched on (Include Erosion simulation=1) -- confirmed against two real datasets
+    # with erosion off (StLucia_FlashFlood, Dijkring41_Flood), where the var is correctly
+    # absent from get_output_var_names(). Every fixture this project had before those two
+    # happened to run with erosion on, which is what let this go unasserted-conditionally
+    # for as long as it did. Same treatment as OPTIONAL_LAYER_SUFFIXES/SWATRE_ONLY_OPTIONAL
+    # above: read the switch from the runfile rather than assuming it's always on.
+    EROSION_ONLY = ("soil_erosion~mass-per-area",)
+
     @staticmethod
     def _is_swatre(runfile_path):
         return _parse_runfile_setting(runfile_path, "Infil Method") == "1"
+
+    @staticmethod
+    def _is_erosion_active(runfile_path):
+        return _parse_runfile_setting(runfile_path, "Include Erosion simulation") == "1"
 
     @needs_runfile
     def test_coupling_vars_in_output_list(self):
@@ -130,10 +143,13 @@ class TestMetadata:
         try:
             out_vars = m.get_output_var_names()
             is_swatre = self._is_swatre(RUNFILE)
+            is_erosion = self._is_erosion_active(RUNFILE)
             for name in MAP_OUTPUTS_COUPLING + SCALAR_OUTPUTS:
                 if name.endswith(self.OPTIONAL_LAYER_SUFFIXES):
                     continue
                 if is_swatre and name in self.SWATRE_ONLY_OPTIONAL:
+                    continue
+                if not is_erosion and name in self.EROSION_ONLY:
                     continue
                 assert name in out_vars, f"{name!r} missing from output var names"
         finally:
@@ -423,16 +439,24 @@ class TestPostEventValues:
         expected to read negative); it now checks the erosion *component* -- what the test
         name actually asks about -- via that same qMax(0,.) split.
 
-        The "detachment must have happened somewhere" expectation is conditional on runoff
-        actually occurring, not assumed outright. This is the second test in this suite that
-        passed vacuously on a config where the underlying process was structurally silenced --
-        the first was test_coupling_vars_in_output_list assuming a layer-3 that legitimately
-        isn't always registered. Here, with Include Infiltration=1 (see README.rst), essentially
-        all rainfall on VNIIMZ_20m infiltrates and runoff is ~zero; with no surface flow, zero
-        detachment everywhere is the physically correct outcome, not a bug -- flow shear is what
-        drives splash/flow detachment in the first place. So the test now branches on whether
-        runoff actually occurred: no runoff -> erosion must be exactly zero (and finite); real
-        runoff -> some detachment is expected, as before.
+        The "detachment must have happened somewhere" expectation only applies when runoff
+        actually occurred, not unconditionally. With Include Infiltration=1 (see README.rst),
+        essentially all rainfall on VNIIMZ_20m infiltrates and runoff is ~zero -- real runoff
+        means some detachment is expected, as asserted below.
+
+        No-runoff does NOT imply zero detachment, though -- confirmed directly against the
+        engine source, not assumed: splash detachment (cell_SplashDetachment(),
+        erosion/lisErosionSplash.cpp) is driven by rainfall kinetic energy hitting ponded water
+        (gated on WH > HMIN, a min depth, not on flow) and is called unconditionally every step
+        from lisModel.cpp. Flow detachment (cell_FlowDetachment()) is the only one of the two
+        gated on actual overland flow -- it's called from inside lisOverlandflow.cpp. This test
+        used to assert "no runoff -> erosion must be exactly zero", reasoning that flow shear is
+        what drives detachment -- wrong for splash, which needs no flow at all. Confirmed wrong
+        on Sicily_DebrisFlow: a real cell showed net erosion with runoff ~0 m3 (rainsplash on
+        ponded rainfall, no surface flow involved) -- not a bug, exactly what
+        cell_SplashDetachment()'s own gating predicts. So the no-runoff branch asserts nothing
+        beyond the finiteness check already done above; only the has-runoff branch (flow
+        detachment plausibly active too) still asserts detachment/deposition occurred.
         """
         m = _make_model()
         try:
@@ -454,11 +478,9 @@ class TestPostEventValues:
             runoff_occurred = runoff > 1e-6 * max(abs(rain), 1e-12)
 
             if not runoff_occurred:
-                assert np.all(erosion_component == 0.0), (
-                    f"runoff is ~zero (runoff={runoff:.4g} m3, rain={rain:.4g} m3) but some "
-                    "cell still shows net erosion -- detachment without surface flow is "
-                    "unexpected"
-                )
+                # Splash detachment doesn't need runoff (see docstring) -- nothing to assert
+                # here beyond the finiteness check already done above.
+                pass
             else:
                 assert np.any(erosion_component > 0), (
                     f"runoff occurred (runoff={runoff:.4g} m3) but no cell shows net erosion "
@@ -731,7 +753,18 @@ class TestPerCellRainfallRunoff:
     """
 
     TOLERANCE_MM = 1e-3   # float32 map storage precision, not a physics tolerance
-    TOLERANCE_M3 = 1e-2
+
+    # Runoff (unlike rainfall) accumulates upstream flow, so its magnitude spans many
+    # orders across a grid -- and across datasets, from a few m3 on a small catchment to
+    # tens of thousands of m3 at an outlet cell on a large one. A single fixed absolute
+    # tolerance tuned to VNIIMZ_20m's scale (0.01 m3) failed on two real, larger datasets
+    # (StLucia_FlashFlood: 0.060 m3 residual; StLucias_DebrisFlood: 0.034 m3 residual) for
+    # no reason other than their own runoff being proportionally larger -- a scaling
+    # artifact, not a correctness signal. Scale the tolerance to the map's own reported
+    # magnitude instead, with a small absolute floor for near-zero domains (so a genuinely
+    # tiny catchment doesn't get an unreasonably tight tolerance from a near-zero scale).
+    TOLERANCE_REL = 1e-4  # matches the fixed 0.01 m3 that worked at VNIIMZ_20m's own scale
+    TOLERANCE_M3_FLOOR = 1e-2
 
     @needs_runfile
     def test_rainfall_amount_matches_own_rainfall_map(self):
@@ -802,9 +835,12 @@ class TestPerCellRainfallRunoff:
         assert valid.any(), "runoff map has no valid (non-nodata) cells to compare"
 
         residual = np.abs(runoff_bmi_m3[valid] - runoff_file_m3[valid])
-        assert residual.max() < self.TOLERANCE_M3, (
+        scale = np.abs(runoff_file_m3[valid]).max()
+        tolerance = max(self.TOLERANCE_REL * scale, self.TOLERANCE_M3_FLOOR)
+        assert residual.max() < tolerance, (
             f"surface-water~runoff_amount diverges from LISEM's own {runoff_map_name}: "
-            f"max |residual|={residual.max():.6g} m3 (tolerance {self.TOLERANCE_M3} m3)"
+            f"max |residual|={residual.max():.6g} m3 (tolerance {tolerance:.6g} m3 = "
+            f"max({self.TOLERANCE_REL} * scale={scale:.6g}, floor={self.TOLERANCE_M3_FLOOR}))"
         )
 
     @needs_runfile
@@ -818,17 +854,30 @@ class TestPerCellRainfallRunoff:
         -- same split already established in docs/bmi/GATE7_LISEM_PREP.md), so this uses nansum, not
         a raw sum -- a raw sum over the whole grid propagates NaN from cells that were never part of
         the catchment to begin with and has nothing to do with the reset mechanism being tested.
+
+        Waits for rainfall to actually start rather than assuming a fixed step count gets there:
+        a fixed 5-step wait only ever worked because it happened to match VNIIMZ_20m's own
+        timestep/rain-onset timing -- it failed on 5 of 6 real legacy datasets (all with real
+        rainfall) purely because 5 steps covered too little simulated time for rain to have
+        started yet at their own timestep. Bounded by the run's own end time, so a fixture with
+        genuinely no rainfall (test_lake: no rainfall file at all) skips cleanly instead of
+        spinning through a full multi-hour run only to fail the same way regardless.
         """
         m = _make_model()
         try:
             if "surface-water~rainfall_amount" not in m.get_output_var_names():
                 pytest.skip("surface-water~rainfall_amount not registered for this run config")
-            for _ in range(5):
-                m.update()
+            end = m.get_end_time()
             rain_before = _read(m, "surface-water~rainfall_amount")
-            assert np.nansum(rain_before) > 0, (
-                "expected nonzero rainfall after 5 steps -- test setup issue"
-            )
+            while np.nansum(rain_before) == 0.0 and m.get_current_time() < end - 1e-9:
+                m.update()
+                rain_before = _read(m, "surface-water~rainfall_amount")
+            if np.nansum(rain_before) == 0.0:
+                pytest.skip(
+                    "rainfall never became nonzero over the whole run -- this fixture doesn't "
+                    "produce real rainfall (e.g. no rainfall file), nothing to test the reset "
+                    "behavior against"
+                )
 
             m.set_value("model__reset_event", np.array([1.0]))
 
