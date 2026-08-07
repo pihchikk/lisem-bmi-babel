@@ -12,6 +12,8 @@ bmi_lisem
 
 .. start-intro
 
+*(Краткая версия на русском: `README.ru.md <README.ru.md>`_)*
+
 **bmi_lisem** is a native, in-process `Basic Model Interface (BMI)
 <https://bmi.readthedocs.io/>`_ for the `OpenLISEM
 <https://github.com/vjetten/openlisem>`_ event-based hydrological and soil-erosion
