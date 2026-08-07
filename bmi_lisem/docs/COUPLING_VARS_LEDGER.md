@@ -478,6 +478,42 @@ wasn't changed without checking first. The two candidate fixes are (1) an explic
 or (2) rejecting `Infil Method=0` outright at parse time as an unsupported value in this build, if
 `INFIL_NONE` was never meant to reach this code at all.
 
+#### Decision: warn, don't change the computation (2026-08)
+
+Deliberately not implementing either candidate fix above: anyone currently getting accidental Smith &
+Parlange infiltration under `Infil Method=0` would silently lose it, and that's a behavior change
+requiring its own decision -- not something to bundle into a "just add a warning" pass. The actual
+problem being fixed here is the *silence*, not the computation.
+
+Added a warning at initialization, `TWorld::ParseRunfileData()` (`model/lisRunfile.cpp`, right after
+`InfilMethod` is finalized -- catches both `Infil Method=0` directly and `Include Infiltration=0`,
+which also forces `InfilMethod = INFIL_NONE`), stating plainly that `Infil Method=0` does not disable
+infiltration, that the model falls through to Smith & Parlange, and that soil-moisture output may be
+physically meaningless if the dataset's Ksat/Psi/theta values weren't prepared for that formula.
+
+Routed through the engine's existing non-fatal diagnostic path (`DEBUG(s)`, `model.h:85`, `emit
+debug(QString(s))`) for GUI visibility -- but that signal has **only ever had a GUI listener**
+(`ui_full/LisUIModel.cpp:214`, `connect(W, &TWorld::debug, this, &lisemqt::worldDebug)`); nothing in
+`BmiLisem.cpp` connects to it, so a BMI-driven run would see nothing from `DEBUG()` alone. Also
+printed to `stdout` via the same `QTextStream consoleout` mechanism `TWorld::Update()` already uses
+for per-step progress output (`model/lisModel.cpp:453`), gated the same way: `if (op.doBatchmode &&
+noInterface)`. `BmiLisem.cpp`'s constructor sets `noInterface = true`, `bmiMode = true`, and
+`op.doBatchmode = true` (`bmi_lisem/BmiLisem.cpp:49-61`) before `Initialize()` ever runs -- so this
+condition is true for every BMI-driven run, and this is the exact channel a BMI caller already
+receives progress text through (confirmed empirically all session: `"progress: step N ..."` lines
+appear in captured stdout for every BMI/pytest run). Reusing that channel rather than inventing a new
+BMI-specific one.
+
+Purely additive by construction, not just by testing: the new code is entirely inside `if (InfilMethod
+== INFIL_NONE) { DEBUG(...); consoleout print; }`, touching no map, no state, no other branch --
+zero possible effect on any computed value.
+
+Verified: rebuilt, ran the console binary directly (`build/Lisem -ni -r <runfile>`) against all three
+`Infil Method=0` datasets (`test_lake`, `sicily_debrisflow`, `dijkring41_flood`) -- warning printed
+exactly once each, before the simulation loop starts. Ran `vniimz_20m` (`Infil Method=3`) -- no
+warning. The other three legacy datasets and all `tiny*` fixtures also use non-zero `Infil Method`,
+so none of them trigger it either.
+
 ### Full 27-test suite run against all six datasets as permanent fixtures (2026-08)
 
 Each dataset run through the complete test suite (not just the one-off `initialize()`/`update()`/
@@ -536,3 +572,154 @@ fails because a cell shows net erosion while computed runoff is ~zero (rain=9856
 test assumed detachment requires surface flow, but rainsplash detachment from raindrop impact is a real
 mechanism independent of runoff; the test's assumption, not the engine's output, is likely what's wrong
 here.
+
+## Upstream comparison: `openlisem_bmi` vs pristine `vjetten/openlisem` (2026-08)
+
+This section answers a narrower question than "is our physics correct" — there's no second LISEM to
+validate against the way official AquaCrop v7.3 served as ground truth elsewhere in this project's BMI
+work. It answers: **did the six engine changes below break something upstream did correctly, or fix
+something upstream had wrong?**
+
+Every claim in this section is tagged by how it was established, because that distinction has mattered
+before in this project and the cost of not tagging it was real: an earlier "no compatible external
+datasets exist" conclusion was source-read and generalized from testing 2 of 6 datasets, and turned out
+wrong once all 6 were actually tried (see "External real-world datasets" above). The same discipline
+applies here.
+
+- **measured** — pristine upstream was actually built and run, and this is a comparison of real output
+  (or a real crash/backtrace)
+- **source-read** — determined by reading upstream's code without executing it
+- **inferred** — reasoned from other evidence, not directly checked
+
+### Scope and what was *not* done — read this before the dispositions below
+
+- **No pinned base commit.** The fork's actual divergence point from upstream was never identified via
+  git history or content-matching. "Pristine upstream" throughout this section means `vjetten/openlisem`
+  at the tip of its `main_C` branch as of the clone date (2026-08) — not the specific commit this fork
+  was originally vendored from. Upstream's own independent development since that real (unknown)
+  divergence point is substantial: a plain `diff -rq` between the fork's `openlisem_bmi/` and the cloned
+  tree shows **60 of ~69 shared source files differ**. Most of that is unrelated to the six changes below
+  and is normal upstream evolution, not a defect on either side — but it means the numerical comparison
+  below cannot cleanly isolate "the effect of changes 1-6" from "everything else that changed since the
+  actual fork point." Both are mixed together in any observed difference.
+- **No AddressSanitizer build.** The original task brief suggested building changes 1-2 under ASan.
+  This was not done — upstream was built as a plain CMake Release build. Change 1's disposition below
+  rests on a real crash reproduction (a measured SIGSEGV with a `gdb` backtrace), not an ASan report.
+- **The upstream clone and build no longer exist.** They were deleted during a disk-space cleanup
+  earlier in this pass and were not recreated for this writeup, per instruction. Nothing below can be
+  re-verified without re-cloning and rebuilding.
+
+### Per-change disposition
+
+**1. `nullptr`-defaulting `TWorld`'s ~364 raw pointer members — CONFIRMED-NECESSARY**
+
+- *source-read*: upstream's `TMmapVariables.h` declares the same pointers without `= nullptr` (checked
+  directly, e.g. `*DEM,` vs the fork's `*DEM = nullptr,`, same line numbers); `TWorld::TWorld()` in
+  upstream's `lisModel.cpp` is an empty constructor body — these pointers are genuinely left
+  uninitialized (real UB), not merely undocumented.
+- *measured*: built pristine upstream's console `Lisem` binary and ran it (`-ni -r <runfile>`) against
+  all three `Infil Method=0` datasets (`test_lake`, `sicily_debrisflow`, `dijkring41_flood`). All three
+  **SIGSEGV'd**, `gdb` backtrace identical across all three: `TWorld::InfilEffectiveKsat() [clone
+  ._omp_fn.0]` ← `GOMP_parallel` ← `TWorld::InfilEffectiveKsat()` ← `TWorld::DoModel()` ← `main()`. The
+  fork's own console binary, built from the exact same source tree plus this fix, ran all three to
+  completion on the identical runfiles with zero crash.
+- *inferred*: the specific causal mechanism was **not** confirmed at the memory level. The release build
+  had no debug symbols — `gdb`'s `print W.WHboundarea` / `print W.SwitchWaveUser` both failed ("No
+  symbol in current context"), so the actual runtime value of the suspected pointer was never observed.
+  The `WHboundarea`-based explanation is inferred from: (a) `WHboundarea` sits at the same declaration
+  line in both trees' `TMmapVariables.h`, missing `=nullptr` only upstream; (b) it's the only variable
+  dereferenced in `InfilEffectiveKsat()`'s `SwitchWaveUser`-gated branch without another allocation
+  guarantee. This is a plausible, not a proven, root cause for *which* pointer crashes — that the crash
+  itself is real and fork-vs-upstream-differential is measured; the specific mechanism is inferred.
+
+**2. Gating `ThetaI2a` allocation on `SwitchTwoLayer` — FORK-INTRODUCED (nuanced)**
+
+- *source-read only — no execution was performed or possible for this one*: there's no crash or
+  numeric symptom to reproduce upstream-side, since upstream has no BMI to over-advertise a variable
+  through in the first place. Confirmed by reading: upstream's `lisDataInit.cpp` allocates
+  `ThetaI2a = NewMap(0)` unconditionally (matching the fork's pre-fix state exactly); upstream's own
+  `report()` call for `ThetaI2a` (`lisReportmaps.cpp`) **is** gated on `SwitchTwoLayer`, so the
+  unconditional allocation is harmless in upstream's own usage.
+- The "fork-introduced" call rests on this session's earlier finding (established by reading and testing
+  the fork alone, before this upstream-comparison pass, not re-verified against upstream here) that the
+  fork's own BMI registry used "pointer is non-null" as its sole advertisement signal — that mechanism
+  doesn't exist upstream at all, so the bug it caused can't either.
+
+**3. `SwitchInfiltration && InfilMethod != INFIL_SWATRE` guard on `BmiLisem.cpp`'s `avgTheta()` calls — NOT-COMPARABLE**
+
+- *source-read (repository inspection, not execution)*: `find` over the cloned pristine tree turned up
+  zero BMI-related files or directories anywhere — no `BmiLisem.cpp`, no `bmi_lisem/` directory. There is
+  no analogous code path to compare against.
+
+**4. `Fcum->Drc += (WHorig - WHN)` in `InfilSwatre()` — FORK-INTRODUCED**
+
+- *source-read only — not measured*: grepped every use of `Fcum` across upstream's
+  `hydro/lisInfiltration.cpp` and `swatre/lisInfilSwatre.cpp`. It is used exclusively by the Green &
+  Ampt/Smith & Parlange formula; `InfilSwatre()` never references it at all — not a partial or buggy
+  implementation, a complete absence. No SWATRE run was performed against pristine upstream to watch
+  `Fcum` stay at zero directly; the source absence was judged unambiguous enough not to need it, but
+  that judgment call itself is unverified by execution.
+
+**5. `EQ1/EQ2/EQ3` bounds checking in `ParseRunfileData()` — disposition is CONFIRMED-NECESSARY, but this rests entirely on source-read, not a reproduced crash**
+
+- *source-read*: upstream's `lisRunfile.cpp` has the identical unguarded `param[1]/param[2]/param[3]`
+  indexing in all three `EQ1`/`EQ2`/`EQ3` blocks, no `param.count()` check anywhere.
+- **Gap found while writing this section, 2026-08**: none of the six legacy datasets' actual committed
+  runfile templates (`meta/Lisem/legacy_datasets/*/run.run.template`) still use the comma-separated
+  format that triggers this crash — checked directly just now, all six use semicolons
+  (`KE parameters EQ1=1;8.950;0.520;0.042`, etc.). They were reformatted during this project's own
+  curation pass, before the upstream numerical comparison below was ever run. So the numerical-comparison
+  test runs against pristine upstream **never exercised this code path on either engine** — no crash was
+  observed on upstream for this specific defect in this pass, because the input that would trigger it no
+  longer exists in this project's fixtures. The "confirmed-necessary" call rests entirely on comparing
+  source code against a defect this project already reproduced **on the fork**, in an earlier phase,
+  against the original uncurated comma-separated data (see "Fixed: `KE parameters EQ1/EQ2/EQ3`..."
+  above) — it was not re-confirmed against upstream in this pass.
+
+**6. `getTimefromString()`'s no-colon fallback day-index — source-read confirms the identical defect; the measured numerical comparison does not show the expected symptom, and this is an open, unresolved discrepancy, not a clean confirmation**
+
+- *source-read*: upstream's `getTimefromString()` has the identical `double day = 0;` no-colon fallback
+  default.
+- *measured, and unresolved*: `stlucia_flashflood` and `stlucias_debrisflood` both use `5 year
+  johnson.txt`, genuinely in the bare-minutes no-colon format that triggers this exact branch, with
+  `Begin time=001:0000` (day-index 0) and `Event based=0` (checked directly — so the function's
+  `SwitchEventbased` early-return, which would bypass the `day` variable entirely, is *not* in play
+  here; this was checked specifically because it's the obvious first explanation and it doesn't hold).
+  Both datasets were run through pristine upstream and the fork; `totals.csv` came back **byte-identical**
+  on both. Given the bug's established symptom on the fork's own pre-fix code (verified in an earlier
+  phase of this project) was "every rainfall-dependent output reads exactly zero the whole run," and the
+  fork's current build has the fix (real ~103mm rainfall observed), an upstream build that still has the
+  bug would be expected to diverge sharply on these two datasets — it did not. **This is flagged as an
+  open discrepancy, not explained here.** Two of the more obvious candidate explanations were checked and
+  ruled out (event-based early return does not apply). Resolving it would need re-running upstream with
+  the rainfall array itself instrumented, which is out of scope for this writeup per instruction not to
+  rebuild. Until resolved, treat change 6's real-world necessity as source-confirmed but not
+  behaviorally confirmed.
+
+### Numerical comparison across fixtures
+
+Ran both engines' own console `Lisem` binary (`-ni -r <runfile>`, not the BMI — upstream has none) on
+each fixture, each into its own result directory, diffed `totals.csv` (excluding line 1, which only
+echoes the runfile path). One methodology note: upstream's current HEAD requires two runfile keys this
+project's runfiles don't have (`Correct extreme WH`, `WH extreme threshold` — schema drift since the
+fork's snapshot, unrelated to changes 1-6); patched onto runfile copies fed to upstream only, with safe
+disabled-feature defaults (`0` / the UI's own documented default `10.0`).
+
+| Fixture | Result | Provenance |
+|---|---|---|
+| `tiny`, `tiny3`, `tiny_swatre`, `vniimz_20m` | Identical | measured |
+| `stlucia_flashflood`, `stlucias_debrisflood` | Identical | measured — see change 6's open discrepancy above; "identical" here is the surprising half of that finding, not an independent clean result |
+| `test_lake`, `dijkring41_flood`, `sicily_debrisflow` | Upstream crashes (SIGSEGV), fork does not | measured — see change 1 |
+| `ganspoel_hydrology` | Differs (46 `totals.csv` lines) | measured (the diff itself); attributed to broad unrelated upstream drift (60/69 files differ) rather than changes 1-6 — that attribution is *inferred* from the scale of the file-level diff, not from isolating which specific upstream commits caused which specific `totals.csv` lines to move |
+
+### Honest summary
+
+This is a real comparison with real measured results, not merely a plan — pristine upstream was
+genuinely built and executed, the crash reproduction for change 1 is a real `gdb` backtrace, and the
+numerical comparison covers ten real fixture pairs. But it is **not a complete verification of changes
+5 and 6**: change 5's necessity was never behaviorally reproduced against upstream in this pass (the
+triggering input no longer exists in this project's own fixtures), and change 6's expected symptom was
+actively looked for and not found, unresolved. Changes 1, 3, and 4 rest on solid source-level evidence
+(3 and 4 have no execution path available to strengthen them further even in principle); change 1 alone
+has a genuine behavioral reproduction. Change 2's classification is a judgment call carried over from
+earlier in this project, not independently re-tested here.

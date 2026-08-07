@@ -22,6 +22,7 @@
 **
 *************************************************************************/
 
+#include <QTextStream>
 #include "lisemqt.h"
 #include "global.h"
 
@@ -421,6 +422,32 @@ void TWorld::ParseRunfileData(void)
     if (!SwitchInfiltration)
         InfilMethod = INFIL_NONE;
 
+    if (InfilMethod == INFIL_NONE) {
+        // Infil Method=0 (or Include Infiltration=0) does NOT disable infiltration --
+        // cell_InfilMethods()/InfilEffectiveKsat() (hydro/lisInfiltration.cpp) have no
+        // dedicated branch for INFIL_NONE, so the model silently falls through to the
+        // Smith & Parlange formula using whatever Ksat/Psi/theta this runfile provides.
+        // A dataset prepared under the assumption that "no infiltration" means no
+        // infiltration model runs at all had no reason to validate those values for
+        // that formula -- see bmi_lisem/docs/COUPLING_VARS_LEDGER.md's "Infil Method=0"
+        // section for two real datasets where this produced physically impossible
+        // soil-moisture output (outside 0-1). Not changing that computation here --
+        // this warning is purely diagnostic, the run proceeds exactly as before.
+        QString infilNoneWarning = QString(
+            "WARNING: Infil Method=0 does not disable infiltration. This engine version "
+            "has no dedicated code path for it and silently runs the Smith & Parlange "
+            "infiltration formula instead, using this runfile's Ksat/Psi/theta values "
+            "as-is. If this dataset's soil-hydraulic maps were never prepared for that "
+            "formula, soil-moisture output may be physically meaningless (e.g. outside "
+            "the valid 0-1 range). See bmi_lisem/docs/COUPLING_VARS_LEDGER.md, "
+            "\"Infil Method=0\" section.");
+        DEBUG(infilNoneWarning);
+        if (op.doBatchmode && noInterface) {
+            QTextStream consoleout(stdout);
+            consoleout << "\n" << infilNoneWarning << "\n";
+            consoleout.flush();
+        }
+    }
 
     // stationary baseflow
     SwitchChannelBaseflowStationary = false;
