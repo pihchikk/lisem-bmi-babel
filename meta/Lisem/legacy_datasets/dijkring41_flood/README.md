@@ -53,3 +53,17 @@ reading soil moisture from this specific fixture should expect this.
 computational cost: ~35 minutes wall-clock on this scale). Real, non-zero
 rainfall (14.1mm, uniform) and infiltration/rainfall volumes closely matched
 (~7.18M m³) — physically consistent aside from the theta anomaly above.
+
+## A known data-curation gap: `soildepth1.map` isn't clipped to the catchment
+
+`soil_layer-depth~layer-1` (`SoilDepth1`) reads valid (non-NaN) everywhere on
+the full 875×625 grid, while other rasters derived from the same catchment —
+e.g. `soil_infiltration~amount` — correctly read NaN outside the catchment
+mask (229,699 of 546,875 cells). Caught by the project's own `TestFiniteness`
+invariant (every raster output should agree on which cells are outside the
+catchment); confirmed at this dataset's full scale, the same gap already
+documented for `ganspoel_hydrology`. The soil-depth source map in this port's
+`maps/` was never clipped to the mask — a curation gap in this dataset's
+`maps/`, not an engine defect. A coupling partner reading soil-depth-related
+variables from this specific fixture should expect valid-looking values
+outside the real catchment boundary.

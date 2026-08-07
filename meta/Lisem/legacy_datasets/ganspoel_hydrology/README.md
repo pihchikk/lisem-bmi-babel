@@ -46,3 +46,18 @@ format, preserving every original minute/intensity(mm/h) value exactly.
 `initialize()` → full `update()` loop → `finalize()` succeeds. Real,
 non-zero results: infiltration 1.9–18mm, rainfall 9.1mm (uniform, single
 rain station), plausible runoff and surface depth.
+
+## A known data-curation gap: `soildepth1.map` isn't clipped to the catchment
+
+`soil_layer-depth~layer-1` (`SoilDepth1`) reads valid (non-NaN) everywhere on
+the full 220×160 grid, while other rasters derived from the same catchment —
+e.g. `soil_erosion~mass-per-area` — correctly read NaN outside the catchment
+mask (24,123 of 35,200 cells). This was caught by the project's own
+`TestFiniteness` invariant, which expects every raster output to agree on
+which cells are outside the catchment. The soil-depth source map in this
+port's `maps/` was never clipped to the mask the way most other inputs here
+were — a curation gap in this dataset's `maps/`, not an engine defect (the
+engine faithfully reports whatever `soildepth1.map` actually contains). A
+coupling partner reading soil-depth-related variables from this specific
+fixture should expect valid-looking values outside the real catchment
+boundary.
