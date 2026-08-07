@@ -12,7 +12,9 @@ bmi_lisem
 
 .. start-intro
 
-*(Краткая версия на русском: `README.ru.md <README.ru.md>`_)*
+*(This is the English reference README. GitLab renders* ``README.md`` *(Russian
+quickstart) by default at the repo root — see that file, or read on here for
+the full English documentation.)*
 
 **bmi_lisem** is a native, in-process `Basic Model Interface (BMI)
 <https://bmi.readthedocs.io/>`_ for the `OpenLISEM

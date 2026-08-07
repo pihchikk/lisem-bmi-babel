@@ -89,7 +89,7 @@ paths pre-corrected for this host — the dataset's other `.run` files carry
 absolute paths from different environments and won't resolve here). Setting it
 unblocks all 13 data-dependent tests with **no `pcraster` install** — see
 `scripts/run_local_tests.sh`, which wires this path plus the
-`LD_LIBRARY_PATH`/de-shadowing steps above into one command, and README.rst's
+`LD_LIBRARY_PATH`/de-shadowing steps above into one command, and README.en.rst's
 "Input data" section for why none of these tests actually need `pcraster`
 (the two that read `.map` output already do it via `osgeo.gdal`; `pcraster`
 is only ever touched by the optional, currently-broken `tests/data/tiny/`

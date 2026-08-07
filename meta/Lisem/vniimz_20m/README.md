@@ -31,7 +31,7 @@ layers, a single ~12-hour event, erosion enabled, ET and interception
 disabled. `Include Infiltration=1` is load-bearing: with it `0`,
 `TWorld::InfilEffectiveKsat()` early-returns and several BMI outputs
 (`ThetaI1a`, interception/infiltration/ET/runoff volumes) never leave their
-zero-initialized default for the entire run — see `README.rst`'s "Input
+zero-initialized default for the entire run — see `README.en.rst`'s "Input
 data" section.
 
 ## Using this scenario
@@ -51,7 +51,7 @@ m = Lisem()
 m.initialize(runfile)
 ```
 
-See `README.rst`'s quickstart section for the full example, including
+See `README.en.rst`'s quickstart section for the full example, including
 `result_dir=` to control where reports get written.
 
 ## Verified

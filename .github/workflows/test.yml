@@ -111,7 +111,7 @@ jobs:
           # so this always falls through to "data tests will skip" as written --
           # that's expected, not a bug in this step. It is NOT the reason the
           # data-dependent tests generally skip in CI: none of them need
-          # pcraster (see README.rst's "Input data" section -- the two that
+          # pcraster (see README.en.rst's "Input data" section -- the two that
           # verify against LISEM's own .map output already use osgeo.gdal).
           # This step exists only for the *optional* tests/data/tiny/ scaffold,
           # which is currently a dead end regardless of pcraster: tiny.run uses

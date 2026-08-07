@@ -85,7 +85,7 @@ Litter interception storage=1.0
 ; Thetaeff/Poreeff/ThetaI1a never leave their zero-initialized default all run: root cause of
 ; lisem-bmi-babel bugs #118 (ThetaI1a reads 0 in-catchment) and #119 (interc/infil/et/runoff all
 ; read exactly 0.0). rain.txt is labelled "fullcatch live coupling event rainfall" -- this dataset
-; is a coupling scenario and needs real infiltration flowing. See README.rst's "Input data" section.
+; is a coupling scenario and needs real infiltration flowing. See README.en.rst's "Input data" section.
 Include Infiltration=1
 Infil Method=3
 Include compacted=0

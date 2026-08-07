@@ -440,7 +440,7 @@ class TestPostEventValues:
         name actually asks about -- via that same qMax(0,.) split.
 
         The "detachment must have happened somewhere" expectation only applies when runoff
-        actually occurred, not unconditionally. With Include Infiltration=1 (see README.rst),
+        actually occurred, not unconditionally. With Include Infiltration=1 (see README.en.rst),
         essentially all rainfall on VNIIMZ_20m infiltrates and runoff is ~zero -- real runoff
         means some detachment is expected, as asserted below.
 

@@ -6,7 +6,7 @@
 #   1. LD_LIBRARY_PATH -> the built libbmilisem.so (openlisem_bmi/build).
 #   2. LISEM_TEST_RUNFILE -> a real runfile. Defaults to the bundled
 #      VNIIMZ_20m scenario (bmi_lisem.scenarios.default_scenario_runfile(),
-#      see meta/Lisem/vniimz_20m/README.md and README.rst's "Input data"
+#      see meta/Lisem/vniimz_20m/README.md and README.en.rst's "Input data"
 #      section) -- portable, ships in the repo/wheel, no external dataset or
 #      per-machine path correction needed. Override by exporting
 #      LISEM_TEST_RUNFILE yourself before calling this script (e.g. to point
@@ -16,7 +16,7 @@
 #      of being shadowed by the source tree -- see docs/BUILDING.md's
 #      "Editable installs and shadowing" section.
 #
-# None of this requires pcraster. See README.rst's "Input data" section:
+# None of this requires pcraster. See README.en.rst's "Input data" section:
 # none of the data-dependent tests import it, and the two that verify against
 # LISEM's own .map output already do so via osgeo.gdal.
 #
