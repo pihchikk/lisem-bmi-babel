@@ -166,7 +166,7 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
           skip-existing: true
           # ← БЕЗ password: строку с secrets.TESTPYPI_TOKEN УБРАТЬ
-  
+
   publish:
     name: Publish to PyPI
     needs: [build_linux]

@@ -10,11 +10,11 @@ environment variable is absent the tests are skipped (CI without input data).
 """
 
 import os
-import math
+
 import numpy as np
 import pytest
-
 from _runfile import resolve_runfile
+
 RUNFILE = resolve_runfile()
 needs_runfile = pytest.mark.skipif(
     not RUNFILE,

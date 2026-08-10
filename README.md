@@ -1,4 +1,4 @@
-# bmi_lisem 
+# bmi_lisem
 
 Python/BMI-обёртка над движком OpenLISEM (поверхностный сток, инфильтрация,
 эрозия) для физически связанного моделирования (в первую очередь — с
@@ -9,12 +9,73 @@ AquaCrop). Полное описание, вся терминология и т�
 
 ## Установка
 
-Сначала собирается нативная библиотека (`openlisem_bmi/`, Qt/GDAL/C++ —
-см. `docs/BUILDING.md`), затем ставится Python-пакет:
+Установка в два шага: сначала собирается нативная библиотека
+(`openlisem_bmi/`, это C++/Qt/GDAL-код, не Python), потом уже поверх неё
+ставится Python-пакет. Одним `pip install` не обойтись — библиотеку `pip`
+сам не соберёт.
+
+### Шаг 1. Системные зависимости
+
+На Debian/Ubuntu:
 
 ```bash
-pip install .
+sudo apt install cmake ninja-build g++ libgdal-dev qt6-base-dev libqwt-qt6-dev
 ```
+
+- **CMake + ninja/make + компилятор с C++17** — собирают саму библиотеку.
+- **GDAL** (`libgdal-dev`) — чтение/запись растров.
+- **Qt 6** (`qt6-base-dev`: Core, Gui, Widgets, Network) и **QWT**
+  (`libqwt-qt6-dev`) — нужны для сборки движка OpenLISEM как есть (см. ниже
+  про headless-сборку, если GUI-часть не нужна). QWT иногда ставится не по
+  стандартному пути, тогда сборке нужно явно указать префикс (например,
+  `/usr/local/qwt-6.4.0-ma`).
+
+### Шаг 2. Сборка нативной библиотеки
+
+```bash
+cd openlisem_bmi
+cmake -S . -B build
+cmake --build build -j4
+# результат: build/libbmilisem.so и build/bmilisem.pc (pkg-config файл)
+```
+
+Чтобы Python-пакет на следующем шаге нашёл собранную библиотеку:
+
+```bash
+export LD_LIBRARY_PATH="$PWD/build:$LD_LIBRARY_PATH"
+export PKG_CONFIG_PATH="$PWD/build:$PKG_CONFIG_PATH"
+```
+
+Если Qt/QWT/OpenGL не нужны (сервер, контейнер) — можно собрать движок без
+GUI-стека, что сильно сокращает набор зависимостей и итоговый размер:
+
+```bash
+cmake -S . -B build -DBMI_HEADLESS=ON
+cmake --build build -j4
+```
+
+На работу BMI это не влияет — модель всегда запускается в режиме без
+интерфейса (`noInterface = true`).
+
+### Шаг 3. Python-пакет
+
+Из корня репозитория (не из `openlisem_bmi/`):
+
+```bash
+cd ..
+pip install --no-build-isolation .
+```
+
+`--no-build-isolation` обязателен (так собирается проект — см.
+`docs/BUILDING.md`).
+
+Обычная (не editable) установка — рекомендуемый вариант. При `pip install
+--editable .` исходники `bmi_lisem/` перекрывают собранное расширение на
+пути импорта, и `from bmi_lisem import Lisem` возьмёт "пустой" Python-класс
+вместо скомпилированного. Если editable-установка всё же нужна — запускать
+код не из корня репозитория, а из любой другой директории.
+
+Подробности и диагностика — в `docs/BUILDING.md`.
 
 ## Быстрый старт: запуск на датасете VNIIMZ_20m
 

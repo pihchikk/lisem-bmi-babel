@@ -1,0 +1,53 @@
+
+# prek install:  installs the git hook that runs this on every commit.
+# prek run --all-files: run once against everything already in the repo.
+#
+# Scoped to what this project already has conventions for (setup.cfg's
+# [flake8], pyproject.toml's [tool.isort]) plus generic file hygiene --
+# deliberately no C++ formatter (no existing .clang-format here, and
+# reformatting ~100 vendored/adapted openLISEM source files is a separate,
+# much bigger decision than wiring up hooks).
+#
+# `exclude` below is load-bearing, not cosmetic:
+#
+# - meta/Lisem/ is curated external dataset data (PCRaster .map binaries,
+#   rainfall tables, runfile templates) -- not source code. A first run
+#   without excluding it appended a stray byte to 277 .map files via
+#   end-of-file-fixer (binary-unsafe on this format) before the changes were
+#   caught and reverted. bmi_lisem/tests/data/tiny/ is the same kind of
+#   fixture data, same reasoning.
+# - openlisem_bmi/ is vendored upstream OpenLISEM (see VENDORED.md, which
+#   tracks local modifications as an explicit short list against a pristine
+#   upstream snapshot). Whitespace-only reformatting there would make every
+#   touched file look modified relative to upstream for no functional
+#   reason, defeating the point of VENDORED.md. If a genuine, intentional
+#   change to a vendored file is being made, format that file by hand to
+#   match its own surrounding style -- don't let a hook touch it.
+#
+# Never drop this exclude without re-verifying file-hygiene hooks are
+# binary-safe on .map, and without a deliberate decision to let hooks touch
+# vendored code.
+exclude: '^(meta/Lisem/|openlisem_bmi/|bmi_lisem/tests/data/tiny/).*|\.ipynb$'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8

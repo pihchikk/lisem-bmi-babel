@@ -55,7 +55,7 @@ def _find_scenario_dir(*subdir: str, template_name: str) -> Path:
 
 
 def _write_runfile(scenario_dir: Path, template_name: str, map_dir: Path,
-                    rain_dir: Path, result_dir: str | None, prefix: str) -> str:
+                   rain_dir: Path, result_dir: str | None, prefix: str) -> str:
     if result_dir is None:
         result_dir = tempfile.mkdtemp(prefix=f"lisem_{prefix}_")
     os.makedirs(result_dir, exist_ok=True)
