@@ -123,9 +123,19 @@ Quickstart with the bundled scenario
 
 No runfile of your own needed to try the BMI against a real catchment —
 ``bmi_lisem.scenarios.default_scenario_runfile()`` writes a ready-to-use
-runfile for a bundled, real 20m-resolution catchment and a single real storm
-event (``meta/Lisem/vniimz_20m/``, ships with the package; see that
-directory's ``README.md`` for exactly what it is and how it was curated):
+runfile for a real 20m-resolution catchment and a single real storm event
+(``meta/Lisem/vniimz_20m/``; see that directory's ``README.md`` for exactly
+what it is and how it was curated).
+
+.. note::
+
+   These catchments live in the repository and are **not installed into the
+   wheel** — a built ``.whl`` ships code only. So this works from a source
+   checkout; from an installed wheel ``default_scenario_runfile()`` raises
+   ``FileNotFoundError`` (naming both paths it searched), and you pass
+   ``initialize()`` a path to your own runfile instead. To bundle the data
+   again, restore the ``install_subdir`` call in ``meson.build`` — the
+   commented-out block there says how.
 
 .. code-block:: pycon
 
@@ -221,8 +231,9 @@ Input data
 
 An OpenLISEM run needs a runfile plus PCRaster input maps (LDD, DEM, Ksat, mask,
 land use, cohesion, gradient, …) and a rainfall table. Two ready-to-use datasets
-ship in this repo, so no external download is needed to run the model or the
-test suite:
+ship **in this repository** — no external download is needed to run the model or
+the test suite from a source checkout. Neither is installed into the wheel (see
+the note under "Quickstart" above):
 
 * **``meta/Lisem/vniimz_20m/``** — a real, measured 20m-resolution catchment
   (204×89 grid, 6,821 in-catchment cells) and a single real storm event,

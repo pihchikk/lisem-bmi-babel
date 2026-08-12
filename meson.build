@@ -70,10 +70,17 @@ py.extension_module(
     override_options : ['cython_language=cpp'],
 )
 
-install_subdir(
-    'meta/Lisem',
-    install_dir: py.get_install_dir() / 'bmi_lisem/data',
-)
+# The bundled catchments under meta/Lisem/ are deliberately NOT installed into
+# the wheel. They stay in the repository and are reachable from a source
+# checkout (bmi_lisem.scenarios falls back to meta/Lisem/), but a built wheel
+# ships code only.
+#
+# To put them back, restore:
+#     install_subdir('meta/Lisem',
+#                    install_dir: py.get_install_dir() / 'bmi_lisem/data')
+# They add ~8 MB to a ~77 MB wheel (112 MB on disk; PCRaster .map files
+# compress hard), so this is not where wheel size mostly comes from -- the bulk
+# is the Qt6/GDAL/QWT stack auditwheel bundles.
 
 # This is a temporary fix for editable installs.
 run_command('cp', '-r', 'bmi_lisem/data', 'build')

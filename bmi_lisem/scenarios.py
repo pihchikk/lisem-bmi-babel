@@ -49,8 +49,10 @@ def _find_scenario_dir(*subdir: str, template_name: str) -> Path:
 
     raise FileNotFoundError(
         f"scenario data not found for {'/'.join(subdir)} -- looked in "
-        f"{installed} and {repo_relative}. Rebuild/reinstall bmi_lisem, or run "
-        f"from a source checkout that has meta/Lisem/{'/'.join(subdir)}/."
+        f"{installed} and {repo_relative}. Wheels ship code only, so "
+        f"reinstalling will not help: run from a source checkout that has "
+        f"meta/Lisem/{'/'.join(subdir)}/, pass initialize() your own runfile "
+        f"path instead, or rebuild with meson.build's install_subdir restored."
     )
 
 
