@@ -9,8 +9,27 @@ name: test
 on:
   push:
     branches: ['feat/**', 'main', 'master']
+    # Documentation-only edits cannot change what pytest does, and this
+    # workflow builds QWT from source before it can run anything. Editing a
+    # README through the GitHub web UI is a push like any other, so without
+    # this every such edit paid for a full native build.
+    paths-ignore:
+      - '**.md'
+      - '**.rst'
+      - 'docs/**'
+      - 'LICENSE*'
+      - 'CREDITS*'
+      - 'CHANGES*'
   pull_request:
   workflow_dispatch:
+
+# Successive pushes to the same branch supersede each other: a run started for
+# a commit that is already outdated tells you nothing, and two full QWT builds
+# racing each other is just slower for both. The in-flight run is cancelled
+# rather than left to finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   QWT_PREFIX: /usr/local/qwt-6.4.0-ma

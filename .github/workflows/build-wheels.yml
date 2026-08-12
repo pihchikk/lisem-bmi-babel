@@ -14,6 +14,13 @@ on:
     branches: ['pypi-version']
   workflow_dispatch:
 
+# Same reasoning as test.yml, minus cancel-in-progress: a run triggered by a
+# tag may already be publishing, and cancelling a half-finished upload is worse
+# than letting a redundant build finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   QWT_PREFIX: /usr/local/qwt-6.4.0-ma
   # Коммит/путь QWT-форка в истории репо (из ноутбука: git checkout f28086d~1 -- qwt-multiaxes-qt6)
